@@ -43,6 +43,9 @@ GELI_KEYPATH = '/data/geli'
 
 RE_HISTORY_ZPOOL_SCRUB = re.compile(r'^([0-9\.\:\-]{19})\s+zpool scrub', re.MULTILINE)
 RE_HISTORY_ZPOOL_CREATE = re.compile(r'^([0-9\.\:\-]{19})\s+zpool create', re.MULTILINE)
+ZFS_CHECKSUM_CHOICES = [
+    'ON', 'OFF', 'FLETCHER2', 'FLETCHER4', 'SHA256', 'SHA512', 'SKEIN', 'EDONR',
+]
 ZFS_ENCRYPTION_ALGORITHM_CHOICES = [
     'AES-128-CCM', 'AES-192-CCM', 'AES-256-CCM', 'AES-128-GCM', 'AES-192-GCM', 'AES-256-GCM'
 ]
@@ -520,6 +523,7 @@ class PoolService(CRUDService):
         Str('name', required=True),
         Bool('encryption', default=False),
         Str('deduplication', enum=[None, 'ON', 'VERIFY', 'OFF'], default=None, null=True),
+        Str('checksum', enum=[None] + ZFS_CHECKSUM_CHOICES, default=None, null=True),
         Dict(
             'encryption_options',
             Bool('generate_key', default=False),
@@ -702,6 +706,9 @@ class PoolService(CRUDService):
         if dedup:
             fsoptions['dedup'] = dedup.lower()
 
+        if data['checksum'] is not None:
+            fsoptions['checksum'] = data['checksum'].lower()
+
         cachefile_dir = os.path.dirname(ZPOOL_CACHE_FILE)
         if not os.path.isdir(cachefile_dir):
             os.makedirs(cachefile_dir)
@@ -805,6 +812,7 @@ class PoolService(CRUDService):
         ('rm', {'name': 'encryption'}),
         ('rm', {'name': 'encryption_options'}),
         ('rm', {'name': 'deduplication'}),
+        ('rm', {'name': 'checksum'}),
         ('edit', {'name': 'topology', 'method': lambda x: setattr(x, 'update', True)}),
     ))
     @job(lock='pool_createupdate')
@@ -1948,6 +1956,13 @@ class PoolDatasetService(CRUDService):
         cli_namespace = 'storage.dataset'
 
     @accepts()
+    async def checksum_choices(self):
+        """
+        Retrieve checksums supported for ZFS dataset.
+        """
+        return {v: v for v in ZFS_CHECKSUM_CHOICES if v != 'OFF'}
+
+    @accepts()
     async def compression_choices(self):
         """
         Retrieve compression algorithm supported by ZFS.
@@ -2850,6 +2865,7 @@ class PoolDatasetService(CRUDService):
                 ('xattr', None, str.upper),
                 ('atime', None, str.upper),
                 ('casesensitivity', None, str.upper),
+                ('checksum', None, str.upper),
                 ('exec', None, str.upper),
                 ('sync', None, str.upper),
                 ('compression', None, str.upper),
@@ -2935,6 +2951,7 @@ class PoolDatasetService(CRUDService):
         Inheritable(Int('copies')),
         Inheritable(Str('snapdir', enum=['VISIBLE', 'HIDDEN'])),
         Inheritable(Str('deduplication', enum=['ON', 'VERIFY', 'OFF'])),
+        Inheritable(Str('checksum', enum=ZFS_CHECKSUM_CHOICES)),
         Inheritable(Str('readonly', enum=['ON', 'OFF'])),
         Inheritable(Str('recordsize', enum=[
             '512', '1K', '2K', '4K', '8K', '16K', '32K', '64K', '128K', '256K', '512K', '1024K',
@@ -3098,6 +3115,7 @@ class PoolDatasetService(CRUDService):
             ('acltype', None, str.lower, True),
             ('atime', None, str.lower, True),
             ('casesensitivity', None, str.lower, True),
+            ('checksum', None, str.lower, True),
             ('comments', 'org.freenas:description', None, True),
             ('compression', None, str.lower, True),
             ('copies', None, lambda x: str(x), True),
@@ -3229,6 +3247,7 @@ class PoolDatasetService(CRUDService):
         properties_definitions = (
             ('aclmode', None, str.lower, True),
             ('atime', None, str.lower, True),
+            ('checksum', None, str.lower, True),
             ('comments', 'org.freenas:description', None, False),
             ('sync', None, str.lower, True),
             ('compression', None, str.lower, True),
