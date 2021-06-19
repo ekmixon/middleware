@@ -337,17 +337,19 @@ class SharingSMBService(Service):
         is of particular importance with clustered registry shares.
         """
         try:
-            reg_shares = await self.reg_listshares()
+            reg_shares = await self.reg_list()
         except CallError:
             return []
 
         rv = []
-        for idx, name in enumerate(reg_shares):
-            reg_conf = await self.reg_showshare(name)
-            is_home = name == "HOMES"
-            reg_conf["name"] = "HOMES_SHARE" if is_home else name
-            reg_conf["home"] = is_home
-            parsed_conf = await self.smbconf_to_share(reg_conf)
+        for idx, s in enumerate(reg_shares['sections']):
+            if not s['is_share']:
+                continue
+
+            is_home = s['service'] == "HOMES"
+            s["parameters"]["name"] = "HOMES_SHARE" if is_home else s['service']
+            s["parameters"]["home"] = is_home
+            parsed_conf = await self.smbconf_to_share(s['parameters'])
 
             entry = {"id": idx + 1}
             entry.update(parsed_conf)
@@ -360,9 +362,11 @@ class SharingSMBService(Service):
         val = conf.pop(entry['smbconf'], entry['default'])
         if type(val) != dict:
             ret[key] = entry['default']
+            return
 
-        if type(default) == list:
+        if type(entry['default']) == list:
             ret[key] = val['parsed'].split()
+            return
 
         ret[key] = val['parsed']
 
@@ -377,7 +381,7 @@ class SharingSMBService(Service):
         """
         ret = {}
         conf_in = data.copy()
-        vfs_objects = conf_in.pop("vfs objects")
+        vfs_objects = conf_in.pop("vfs objects", "")
         hostsallow = conf_in.pop("hosts allow", None),
         hostsdeny = conf_in.pop("hosts deny", None),
         """
@@ -407,13 +411,15 @@ class SharingSMBService(Service):
         }
         """
         for k, v in DEFAULT_SHARE_PARAMETERS.items():
-            await self.smbconf_convert(conf, ret, key, entry)
+            await self.smbconf_convert(conf_in, ret, k, v)
 
         ret = {
             "purpose": "NO_PRESET",
             "streams": True if "streams_xattr" in vfs_objects else False,
             "timemachine": conf_in.pop("fruit:time machine", False),
             "recyclebin": True if "recycle" in vfs_objects else False,
+            "home": conf_in.pop("home", False),
+            "name": conf_in.pop("name"),
             "fsrvp": False,
             "enabled": True,
             "locked": False,

@@ -9,9 +9,6 @@ from middlewared.utils import osc
 import errno
 
 DEFAULT_GLOBAL_PARAMETERS = {
-    "netbiosname": {"smbconf": "tn:netbiosname": "default": "truenas"},
-    "netbiosname_b": {"smbconf": "tn:netbiosname": "default": "truenas_b"},
-    "netbiosname_local": {"smbconf": "netbios name": "default": ""},
     "dns proxy": {"smbconf": "dns proxy", "default": False},
     "max log size": {"smbconf": "max log size", "default": 51200},
     "load printers": {"smbconf": "load printers", "default": False},
@@ -24,6 +21,28 @@ DEFAULT_GLOBAL_PARAMETERS = {
     "bind interfaces only": {"smbconf": "bind interfaces only", "default": True},
     "registry": {"smbconf": "registry", "default": True},
     "registry shares": {"smbconf": "registry shares", "default": True},
+}
+
+GLOBAL_SCHEMA = {
+    "netbiosname": {"smbconf": "tn:netbiosname", "default": "truenas"},
+    "netbiosname_b": {"smbconf": "tn:netbiosname_b", "default": "truenase-b"},
+    "netbiosname_local": {"smbconf": "netbios name", "default": ""},
+    "workgroup": {"smbconf": "workgroup", "default": "WORKGROUP"},
+    "cifs_SID": {"smbconf": "tn:sid", "default": ""},
+    "netbiosalias": {"smbconf": "netbios aliases", "default": []},
+    "description": {"smbconf": "server string", "default": ""},
+    "enable_smb1": {"smbconf": "server min protocol", "default": "SMB2_10"},
+    "unixcharset": {"smbconf": "unix charset", "default": "UTF8"},
+    "syslog": {"smbconf": "syslog only", "default": False},
+    "apple_extensions": {"smbconf": "tn:fruit_enabled", "default": False},
+    "localmaster": {"smbconf": None, "default": False},
+    "loglevel": {"smbconf": None, "default": 1},
+    "guest": {"smbconf": "guest account", "default": "nobody"},
+    "admin_group": {"smbconf": "tn:admin_group", "default": ""},
+    "filemask": {"smbconf": "create mask", "default": "0775"},
+    "dirmask": {"smbconf": "directory mask", "default": "0775"},
+    "ntlmv1_auth": {"smbconf": "ntlm auth", "default": False},
+    "bindip": {"smbconf": None, "default": ""},
 }
 
 
@@ -101,8 +120,21 @@ class SMBService(Service):
         ret['raw'] = global_conf['parameters'].copy()
         ret['idmap'] = await self.strip_idmap(global_conf['parameters'])
         ret['ds'] = await self.strip_directory_services(global_conf['parameters'])
-        ret['smb'] = global_conf
+        ret['smb'] = global_conf['parameters']
         return ret
+
+    @private
+    async def smbconf_convert(self, conf, ret, key, entry):
+        val = conf.pop(entry['smbconf'], entry['default'])
+        if type(val) != dict:
+            ret[key] = entry['default']
+            return
+
+        if type(entry['default']) == list:
+            ret[key] = val['parsed'].split()
+            return
+
+        ret[key] = val['parsed']
 
     @private
     async def reg_config(self):
@@ -111,40 +143,31 @@ class SMBService(Service):
         In a clustered configuration, we rely exclusively on the contents of the
         clustered SMB configuration in Samba's registry.
         """
+        ret = {"id": 1}
         reg_globals = (await self.middleware.call('smb.reg_globals'))['smb']
-        bind_ips = (reg_globals.pop("interfaces", "")).split()
+        bind_ips = reg_globals.pop("interfaces", {"raw": ""})
+        bind_ips = bind_ips['raw'].split()
         if bind_ips:
             bind_ips.remove("127.0.0.1")
 
         reg_globals.pop("bind interfaces only", "")
-        loglevel = reg_globals.pop("log level", "1")
-        if loglevel.startswith("syslog@"):
-            loglevel = loglevel[len("syslog@")]
+        loglevel = reg_globals.pop("log level", {"raw": "1"})
+        if loglevel['raw'].startswith("syslog@"):
+            loglevel['raw'] = loglevel[len("syslog@")]
 
-        llevel = LOGLEVEL_MAP.get(loglevel.split()[0])
+        llevel = LOGLEVEL_MAP.get(loglevel['raw'].split()[0])
 
-        ret = {
-            "id": 1,
-            "netbiosname": reg_globals.pop("tn:netbiosname", "truenas"),
-            "netbiosname_b": reg_globals.pop("tn:netbiosname_b", "truenas-b"),
-            "netbiosname_local": reg_globals.pop("netbios name", ""),
-            "workgroup": reg_globals.pop("workgorup", "WORKGROUP"),
-            "cifs_SID": reg_globals.pop("tn:sid", ""),
-            "netbiosalias": (reg_globals.pop("netbios aliases", "")).split(),
-            "description": reg_globals.pop("server string", ""),
-            "enable_smb1": reg_globals.pop("server min protocol", "SMB2_10") == "NT1",
-            "unixcharset": reg_globals.pop("unix charset", "UTF8"),
-            "syslog": reg_globals.pop("syslog only", "No") == "Yes",
-            "aapl_extensions": reg_globals.pop("tn:fruit_enabled", "No") == "Yes",
-            "localmaster": False,
-            "loglevel": llevel,
-            "guest": reg_globals.pop("guest account", "nobody"),
-            "admin_group": reg_globals.pop("tn:admin_group", ""),
-            "filemask": reg_globals.pop("create mask", "0775"),
-            "dirmask": reg_globals.pop("directory mask", "0775"),
-            "ntlmv1_auth": reg_globals.pop("ntlm auth", "No") == "Yes",
+        for k, v in GLOBAL_SCHEMA.items():
+            await self.smbconf_convert(reg_globals, ret, k, v)
+
+        ret.update({
             "bindip": bind_ips,
-        }
+            "loglevel": llevel,
+            "localmaster": False,
+        })
+
+        ret["enable_smb1"] = (ret["enable_smb1"] == "NT1")
+
         reg_globals.pop('logging', "file")
         aux_list = [f"{k} = {v}" for k, v in reg_globals.items()]
         ret['smb_options'] = '\n'.join(aux_list)
