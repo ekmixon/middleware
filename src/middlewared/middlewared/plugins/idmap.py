@@ -10,6 +10,7 @@ from middlewared.utils import run, filter_list
 from middlewared.validators import Range
 from middlewared.plugins.smb import SMBCmd, WBCErr, SMBHAMODE
 
+
 class DSType(enum.Enum):
     """
     The below DS_TYPES are defined for use as system domains for idmap backends.
@@ -347,7 +348,9 @@ class IdmapDomainService(CRUDService):
     async def autodiscover_trusted_domains(self):
         smb = await self.middleware.call('smb.config')
 
-        ad_idmap_backend = (await self.query([('name', '=', 'DS_TYPE_ACTIVEDIRECTORY')], {'get': True}))['idmap_backend']
+        ad_idmap_backend = (await self.query(
+            [('name', '=', 'DS_TYPE_ACTIVEDIRECTORY')], {'get': True})
+        )['idmap_backend']
         if ad_idmap_backend == IdmapBackend.AUTORID.name:
             self.logger.trace('Skipping auto-generation of trusted domains due to AutoRID being enabled.')
             return
@@ -542,12 +545,14 @@ class IdmapDomainService(CRUDService):
         If False, the primary group membership is calculated via the "primaryGroupID" LDAP attribute.
 
         `unix_nss_info` if True winbind will retrieve the login shell and home directory from the LDAP attributes.
-        If False or if the AD LDAP entry lacks the SFU attributes the smb4.conf parameters `template shell` and `template homedir` are used.
+        If False or if the AD LDAP entry lacks the SFU attributes,
+        the smb4.conf parameters `template shell` and `template homedir` are used.
 
-        `schema_mode` Defines the schema that idmap_ad should use when querying Active Directory regarding user and group information.
+        `schema_mode` Defines the schema that idmap_ad should use when querying Active Directoryregarding user
+        and group information.
         This can be either the RFC2307 schema support included in Windows 2003 R2 or the Service for Unix (SFU) schema.
-        For SFU 3.0 or 3.5 please choose "SFU", for SFU 2.0 please choose "SFU20". The behavior of primary group membership is
-        controlled by the unix_primary_group option.
+        For SFU 3.0 or 3.5 please choose "SFU", for SFU 2.0 please choose "SFU20". The behavior of primary group
+        membership is controlled by the unix_primary_group option.
 
         `AUTORID` idmap backend options:
         `readonly` sets the module to read-only mode. No new ranges will be allocated and new mappings
@@ -590,14 +595,15 @@ class IdmapDomainService(CRUDService):
         while keeping all RFC 2307 records in one place. This parameter is optional, the default is to access
         the AD server in the current domain to query LDAP records.
 
-        `ldap_url` when using a stand-alone LDAP server, this parameter specifies the LDAP URL for accessing the LDAP server.
+        `ldap_url` when using a stand-alone LDAP server, this parameter specifies the LDAP URL for
+        accessing the LDAP server.
 
         `ldap_user_dn` defines the user DN to be used for authentication.
 
         `ldap_user_dn_password` is the password to be used for LDAP authentication.
 
-        `realm` defines the realm to use in the user and group names. This is only required when using cn_realm together with
-         a stand-alone ldap server.
+        `realm` defines the realm to use in the user and group names. This is only required when using
+        cn_realm together with a stand-alone ldap server.
 
         `RID` backend options:
         `sssd_compat` generate idmap low range based on same algorithm that SSSD uses by default.
@@ -926,9 +932,13 @@ class IdmapDomainService(CRUDService):
         server_role = await self.middleware.call('smb.getparm', 'server role', 'global')
         workgroup = await self.middleware.call('smb.getparm', 'workgroup', 'global')
         ad_enabled = (security.upper() == 'ADS')
-        # In this situation (since we're dealing with idmap backends) we simply check for items set if we have samba_schema
+        # In this situation (since we're dealing with idmap backends) we simply check
+        # for items set if we have samba_schema
         ldap_enabled = (server_role == 'member server' and security.upper() == 'USER')
-        ad_idmap = filter_list(idmap, [('name', '=', DSType.DS_TYPE_ACTIVEDIRECTORY.name)], {'get': True}) if ad_enabled else None
+        if ad_enabled:
+            ad_idmap = filter_list(idmap, [('name', '=', DSType.DS_TYPE_ACTIVEDIRECTORY.name)], {'get': True})
+        else:
+            ad_idmap = None
 
         for i in idmap:
             if i['name'] == DSType.DS_TYPE_DEFAULT_DOMAIN.name:

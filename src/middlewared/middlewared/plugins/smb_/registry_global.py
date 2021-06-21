@@ -1,12 +1,13 @@
+import errno
+import json
+
 from middlewared.service import private, Service
 from middlewared.service_exception import CallError
 from middlewared.utils import run
 from middlewared.plugins.smb import SMBCmd, LOGLEVEL_MAP
 from middlewared.plugins.activedirectory import DEFAULT_AD_PARAMETERS
 from middlewared.plugins.ldap import DEFAULT_LDAP_PARAMETERS
-from middlewared.utils import osc
 
-import errno
 
 DEFAULT_GLOBAL_PARAMETERS = {
     "dns proxy": {"smbconf": "dns proxy", "default": False},
@@ -177,15 +178,22 @@ class SMBService(Service):
     async def global_setparm(self, data):
         cmd = await run([SMBCmd.NET.value, '--json', 'conf', 'setparm', json.dumps(data)], check=False)
         if cmd.returncode != 0:
-            raise CallError(f"Failed to set parameter [{parameter}] to [{value}]: "
-                            f"{cmd.stderr.decode().strip()}")
+
+            raise CallError(f"Failed to setparm: {cmd.stderr.decode().strip()}")
+            # FIXME: where is `parameter` and `value` coming from?
+            """raise CallError(
+                f"Failed to set parameter [{parameter}] to [{value}]: {cmd.stderr.decode().strip()}"
+            )"""
 
     @private
     async def global_delparm(self, data):
         cmd = await run([SMBCmd.NET.value, '--json', 'conf', 'delparm', json.dumps(data)], check=False)
         if cmd.returncode != 0:
-            raise CallError(f"Failed to delete parameter [{parameter}]: "
-                            f"{cmd.stderr.decode().strip()}")
+            raise CallError(f"Failed to delparm: {cmd.stderr.decode().strip()}")
+            # FIXME: where is `parameter` coming from?
+            """raise CallError(
+                f"Failed to delete parameter [{parameter}]: {cmd.stderr.decode().strip()}"
+            )"""
 
     @private
     async def reg_apply_conf_diff(self, diff):

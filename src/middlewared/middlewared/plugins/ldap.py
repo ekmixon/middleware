@@ -198,7 +198,9 @@ class LDAPQuery(object):
                 try:
                     self._handle = pyldap.initialize(server)
                 except Exception as e:
-                    self.logger.debug(f'Failed to initialize ldap connection to [{server}]: ({e}). Moving to next server.')
+                    self.logger.debug(
+                        f'Failed to initialize ldap connection to [{server}]: ({e}). Moving to next server.'
+                    )
                     continue
 
                 res = None
@@ -968,7 +970,9 @@ class LDAPService(ConfigService):
 
         ldap_state = await self.middleware.call('ldap.get_state')
         if ldap_state in ['LEAVING', 'JOINING']:
-            raise CallError(f'LDAP state is [{ldap_state}]. Please wait until directory service operation completes.', errno.EBUSY)
+            raise CallError(
+                f'LDAP state is [{ldap_state}]. Please wait until directory service operation completes.', errno.EBUSY
+            )
 
         await self.middleware.call('datastore.update', self._config.datastore, ldap['id'], {'ldap_enable': True})
         if ldap['kerberos_realm']:

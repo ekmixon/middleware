@@ -87,7 +87,10 @@ class SMBService(Service):
 
         next_rid = str(await self.middleware.call("smb.get_next_rid"))
         gm_add = await run(
-            [SMBCmd.NET.value, '-d', '0', 'groupmap', 'add', 'type=local', f'rid={next_rid}', f'unixgroup={group}', f'ntgroup={group}'],
+            [
+                SMBCmd.NET.value, '-d', '0', 'groupmap', 'add', 'type=local',
+                f'rid={next_rid}', f'unixgroup={group}', f'ntgroup={group}'
+            ],
             check=False
         )
         if gm_add.returncode != 0:

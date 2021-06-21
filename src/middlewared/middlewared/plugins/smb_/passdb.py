@@ -112,7 +112,9 @@ class SMBService(Service):
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE
             )
             await pdbcreate.communicate(input=" \n \n".encode())
-            setntpass = await run([SMBCmd.PDBEDIT.value, '-d', '0', '--set-nt-hash', smbpasswd_string[3], username], check=False)
+            setntpass = await run(
+                [SMBCmd.PDBEDIT.value, '-d', '0', '--set-nt-hash', smbpasswd_string[3], username], check=False
+            )
             if setntpass.returncode != 0:
                 raise CallError(f'Failed to set NT password for {username}: {setntpass.stderr.decode()}')
             if bsduser[0]['locked']:
@@ -136,7 +138,9 @@ class SMBService(Service):
         entry = entry.split(':')
 
         if smbpasswd_string[3] != entry[3]:
-            setntpass = await run([SMBCmd.PDBEDIT.value, '-d', '0', '--set-nt-hash', smbpasswd_string[3], username], check=False)
+            setntpass = await run(
+                [SMBCmd.PDBEDIT.value, '-d', '0', '--set-nt-hash', smbpasswd_string[3], username], check=False
+            )
             if setntpass.returncode != 0:
                 raise CallError(f'Failed to set NT password for {username}: {setntpass.stderr.decode()}')
         if bsduser[0]['locked'] and 'D' not in entry[4]:
@@ -212,10 +216,15 @@ class SMBService(Service):
         if len(pdb_users) > len(conf_users):
             for entry in pdb_users:
                 if not any(filter(lambda x: entry['username'] == x['username'], conf_users)):
-                    self.logger.debug('Synchronizing passdb with config file: deleting user [%s] from passdb.tdb', entry['username'])
+                    self.logger.debug(
+                        'Synchronizing passdb with config file: deleting user [%s] from passdb.tdb', entry['username']
+                    )
                     try:
                         await self.remove_passdb_user(entry['username'])
                     except Exception:
-                        self.logger.warning("Failed to remove passdb user. This may indicate a corrupted passdb. Regenerating.", exc_info=True)
+                        self.logger.warning(
+                            "Failed to remove passdb user. This may indicate a corrupted passdb. Regenerating.",
+                            exc_info=True
+                        )
                         await self.passdb_reinit(conf_users)
                         return

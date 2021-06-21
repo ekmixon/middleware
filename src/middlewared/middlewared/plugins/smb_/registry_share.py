@@ -1,11 +1,11 @@
+import errno
+import json
+
 from middlewared.service import private, Service, filterable
 from middlewared.service_exception import CallError
 from middlewared.utils import run, filter_list
 from middlewared.plugins.smb import SMBCmd, SMBHAMODE, SMBSharePreset
-from middlewared.utils import osc
 
-import errno
-import json
 
 FRUIT_CATIA_MAPS = [
     "0x01:0xf001,0x02:0xf002,0x03:0xf003,0x04:0xf004",
@@ -148,7 +148,8 @@ class SharingSMBService(Service):
     async def reg_addshare(self, data):
         conf = await self.share_to_smbconf(data)
         name = 'homes' if data['home'] else data['name']
-        parsed = await self.smbconf_to_payload(conf)
+        # FIXME: `parsed` not used
+        # parsed = await self.smbconf_to_payload(conf)
 
         payload = {
             "service": name,
@@ -166,7 +167,8 @@ class SharingSMBService(Service):
 
     @private
     async def reg_showshare(self, share):
-        out = []
+        # FIXME: `out` not used
+        # out = []
         net = await self.netconf(action='showshare', share=share, jsoncmd=True)
         version = net.pop('version')
         await self.json_check_version(version)
@@ -382,8 +384,9 @@ class SharingSMBService(Service):
         ret = {}
         conf_in = data.copy()
         vfs_objects = conf_in.pop("vfs objects", "")
-        hostsallow = conf_in.pop("hosts allow", None),
-        hostsdeny = conf_in.pop("hosts deny", None),
+        # FIXME: `hostsallow` and `hostsdeny` not used
+        # hostsallow = conf_in.pop("hosts allow", None),
+        # hostsdeny = conf_in.pop("hosts deny", None),
         """
         ret = {
             "purpose": "NO_PRESET",
@@ -426,7 +429,8 @@ class SharingSMBService(Service):
             "shadowcopy": False,
             "aapl_name_mangling": True if "catia" in vfs_objects else False,
         }
-        cluster_logfile = conf_in.pop("glusterfs: logfile", "")
+        # FIXME: `cluster_logfile` not used
+        # cluster_logfile = conf_in.pop("glusterfs: logfile", "")
         aux_list = [f"{k} = {v['raw']}" for k, v in conf_in.items()]
         ret["auxsmbconf"] = '\n'.join(aux_list)
         return ret
