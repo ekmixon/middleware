@@ -1952,6 +1952,11 @@ class CertificateService(CRUDService):
                     'certificate_update.revoked',
                     'Only certificate(s) can be revoked which have a CA present on the system'
                 )
+            elif old['revoked'] and not new['revoked']:
+                verrors.add(
+                    'certificate_update.revoked',
+                    'Certificate has already been revoked and this cannot be reversed'
+                )
 
             verrors.check()
 
@@ -2703,6 +2708,11 @@ class CertificateAuthorityService(CRUDService):
                 verrors.add(
                     'certificate_authority_update.revoked',
                     'Only Certificate Authorities with a privatekey can be marked as revoked.'
+                )
+            elif old['revoked'] and not new['revoked']:
+                verrors.add(
+                    'certificate_authority_update.revoked',
+                    'Certificate Authority has already been revoked and this cannot be reversed'
                 )
 
             if verrors:
