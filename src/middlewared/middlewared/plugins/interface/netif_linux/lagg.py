@@ -49,10 +49,9 @@ class LaggMixin:
 
     @property
     def lacpdu_rate(self):
-        if self.protocol is not None:
-            if self.protocol in (AggregationProtocol.LACP, AggregationProtocol.LOADBALANCE):
-                # this option only applies to 802.3ad
-                return self._sysfs_read(self.get_options_path("lacp_rate")).split()[0]
+        if self.protocol is not None and self.protocol == AggregationProtocol.LACP:
+            # this option only applies to 802.3ad
+            return self._sysfs_read(self.get_options_path("lacp_rate")).split()[0]
 
     @lacpdu_rate.setter
     def lacpdu_rate(self, value):
