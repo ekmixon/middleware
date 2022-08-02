@@ -18,10 +18,10 @@ def get_assets(name):
         os.path.dirname(os.path.realpath(__file__)),
         'middlewared',
     )
-    result = []
-    for root, dirs, files in os.walk(os.path.join(base_path, name)):
-        result.append(f'{os.path.relpath(root, base_path)}/*')
-    return result
+    return [
+        f'{os.path.relpath(root, base_path)}/*'
+        for root, dirs, files in os.walk(os.path.join(base_path, name))
+    ]
 
 
 class InstallWithBabel(install):

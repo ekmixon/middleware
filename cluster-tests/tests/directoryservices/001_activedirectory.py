@@ -231,7 +231,7 @@ def test_009_validate_dns_records_added(request):
     }
     res = make_ws_request(CLUSTER_IPS[0], payload)
     assert res.get('error') is None, res
-    answers = set([x['address'] for x in res['result']])
+    answers = {x['address'] for x in res['result']}
     assert set(PUBLIC_IPS) == answers
 
 

@@ -93,12 +93,9 @@ class FailoverCriticalAlertSource(ThreadedAlertSource):
                 alerts.append(Alert(CriticalFailoverInterfaceNotFoundAlertClass, iface['name']))
                 continue
 
-            reg = re.search(r'carp: (\S+) .*vhid (\d+)', output, re.M)
-            if not reg:
-                alerts.append(Alert(CriticalFailoverInterfaceCARPNotConfiguredAlertClass, iface['name']))
-            else:
-                carp = reg.group(1)
-                vhid = int(reg.group(2))
+            if reg := re.search(r'carp: (\S+) .*vhid (\d+)', output, re.M):
+                carp = reg[1]
+                vhid = int(reg[2])
                 if carp not in ('MASTER', 'BACKUP'):
                     alerts.append(Alert(CriticalFailoverInterfaceCARPInvalidStateAlertClass, iface['name']))
                 if vhid != iface['failover_vhid']:
@@ -108,4 +105,6 @@ class FailoverCriticalAlertSource(ThreadedAlertSource):
                         'vhid': iface['failover_vhid'],
                     }))
 
+            else:
+                alerts.append(Alert(CriticalFailoverInterfaceCARPNotConfiguredAlertClass, iface['name']))
         return alerts

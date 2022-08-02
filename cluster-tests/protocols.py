@@ -103,22 +103,23 @@ class SMB(object):
         dosmode = 0
         f = None
         for char in str(attributes):
-            if char == "h":
+            if char == "a":
+                dosmode += libsmb.FILE_ATTRIBUTE_ARCHIVE
+
+            elif char == "h":
                 dosmode += libsmb.FILE_ATTRIBUTE_HIDDEN
             elif char == "r":
                 dosmode += libsmb.FILE_ATTRIBUTE_READONLY
             elif char == "s":
                 dosmode += libsmb.FILE_ATTRIBUTE_SYSTEM
-            elif char == "a":
-                dosmode += libsmb.FILE_ATTRIBUTE_ARCHIVE
-
         if mode == "r":
             f = self._connection.create(
                 file,
-                CreateDisposition=1 if not do_create else 3,
+                CreateDisposition=3 if do_create else 1,
                 DesiredAccess=security.SEC_GENERIC_READ,
                 FileAttributes=dosmode,
             )
+
         elif mode == "w":
             f = self._connection.create(
                 file,
@@ -175,7 +176,6 @@ class SMB(object):
         return ret
 
     def get_shadow_copies(self, **kwargs):
-        snaps = []
         host = kwargs.get("host")
         share = kwargs.get("share")
         path = kwargs.get("path", "/")
@@ -197,11 +197,7 @@ class SMB(object):
             raise RuntimeError(cl.stderr.decode())
 
         client_out = cl.stdout.decode().splitlines()
-        for i in client_out:
-            if i.startswith("@GMT"):
-                snaps.append(i)
-
-        return snaps
+        return [i for i in client_out if i.startswith("@GMT")]
 
     def get_quota(self, **kwargs):
         host = kwargs.get("host")

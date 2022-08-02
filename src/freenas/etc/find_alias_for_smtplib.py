@@ -18,7 +18,7 @@ def do_sendmail(msg, to_addrs=None, parse_recipients=False):
 
     if to_addrs is None:
         if not parse_recipients:
-            syslog.syslog('Do not know who to send the message to.' + msg[0:140])
+            syslog.syslog('Do not know who to send the message to.' + msg[:140])
             raise ValueError('Do not know who to send the message to.')
         to_addrs = []
 
@@ -50,8 +50,7 @@ def do_sendmail(msg, to_addrs=None, parse_recipients=False):
     with Client() as c:
         sw_name = c.call('system.product_name')
 
-        margs = {}
-        margs['extra_headers'] = dict(em)
+        margs = {'extra_headers': dict(em)}
         margs['extra_headers'].update({
             'X-Mailer': sw_name,
             f'X-{sw_name}-Host': c.call('system.hostname'),
@@ -61,7 +60,7 @@ def do_sendmail(msg, to_addrs=None, parse_recipients=False):
 
         if em.is_multipart():
             attachments = [part for part in em.walk() if part.get_content_maintype() != 'multipart']
-            margs['attachments'] = True if attachments else False
+            margs['attachments'] = bool(attachments)
             margs['text'] = (
                 'This is a MIME formatted message.  If you see '
                 'this text it means that your email software '
@@ -97,9 +96,8 @@ def get_aliases():
     with open(os.path.join('/etc', '' if osc.IS_LINUX else 'mail', 'aliases'), 'r') as f:
         aliases = {}
 
-        for line in f.readlines():
-            search = ALIASES.search(line)
-            if search:
+        for line in f:
+            if search := ALIASES.search(line):
                 _from, _to = search.groups()
                 aliases[_from] = _to
 
@@ -123,13 +121,16 @@ def main():
     parser.add_argument('-t', dest='parse_recipients', action='store_true',
                         default=False,
                         help='parse recipients from message')
-    parser.usage = ' '.join(parser.format_usage().split(' ')[1:-1])
-    parser.usage += ' [email_addr|user] ..'
+    parser.usage = (
+        ' '.join(parser.format_usage().split(' ')[1:-1])
+        + ' [email_addr|user] ..'
+    )
+
     args, to = parser.parse_known_args()
     if not to and not args.parse_recipients:
         parser.exit(message=parser.format_usage())
     msg = sys.stdin.read()
-    syslog.syslog("sending mail to " + ', '.join(to) + '\n' + msg[0:140])
+    syslog.syslog("sending mail to " + ', '.join(to) + '\n' + msg[:140])
     do_sendmail(msg, to_addrs=to, parse_recipients=args.parse_recipients)
 
 

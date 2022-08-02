@@ -57,8 +57,7 @@ def wait_on_job(_id, ip, timeout):
             timeout -= 1
         elif state in ('SUCCESS', 'FAILED'):
             return {'state': state, 'result': job}
-    else:
-        raise JobTimeOut
+    raise JobTimeOut
 
 
 def make_request(_type, url, **kwargs):

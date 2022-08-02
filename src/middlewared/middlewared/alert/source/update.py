@@ -24,10 +24,10 @@ def is_update_applied(update_version):
     active_be_msg = 'Please reboot the system to activate this update.'
     # TODO: The below boot env name should really be obtained from the update code
     # for now we just duplicate that code here
-    if update_version.startswith(Update.Avatar() + "-"):
-        update_boot_env = update_version[len(Update.Avatar() + "-"):]
+    if update_version.startswith(f"{Update.Avatar()}-"):
+        update_boot_env = update_version[len(f"{Update.Avatar()}-"):]
     else:
-        update_boot_env = "%s-%s" % (Update.Avatar(), update_version)
+        update_boot_env = f"{Update.Avatar()}-{update_version}"
 
     found = False
     msg = ''
@@ -91,23 +91,24 @@ class UpdateNotAppliedAlertSource(ThreadedAlertSource):
     schedule = IntervalSchedule(timedelta(minutes=10))
 
     def check_sync(self):
-        if os.path.exists(UPDATE_APPLIED_SENTINEL):
-            try:
-                with open(UPDATE_APPLIED_SENTINEL, "rb") as f:
-                    data = json.loads(f.read().decode("utf8"))
-            except Exception:
-                log.error(
-                    "Could not load UPDATE APPLIED SENTINEL located at {0}".format(
-                        UPDATE_APPLIED_SENTINEL
-                    ),
-                    exc_info=True
-                )
-                return
+        if not os.path.exists(UPDATE_APPLIED_SENTINEL):
+            return
+        try:
+            with open(UPDATE_APPLIED_SENTINEL, "rb") as f:
+                data = json.loads(f.read().decode("utf8"))
+        except Exception:
+            log.error(
+                "Could not load UPDATE APPLIED SENTINEL located at {0}".format(
+                    UPDATE_APPLIED_SENTINEL
+                ),
+                exc_info=True
+            )
+            return
 
-            if is_update_applied:
-                update_applied, msg = is_update_applied(data["update_version"], create_alert=False)
-                if update_applied:
-                    return Alert(UpdateNotAppliedAlertClass, msg)
+        if is_update_applied:
+            update_applied, msg = is_update_applied(data["update_version"], create_alert=False)
+            if update_applied:
+                return Alert(UpdateNotAppliedAlertClass, msg)
 
 
 class UpdateFailedAlertClass(AlertClass):

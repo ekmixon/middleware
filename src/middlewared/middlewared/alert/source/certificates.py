@@ -55,9 +55,11 @@ class CertificateChecksAlertSource(AlertSource):
 
     async def _get_service_certs(self):
         _type = 'certificate'
-        service_certs = [
+        return [
             {
-                'id': (await self.middleware.call('ftp.config'))['ssltls_certificate'],
+                'id': (await self.middleware.call('ftp.config'))[
+                    'ssltls_certificate'
+                ],
                 'service': 'FTP',
                 'type': _type,
             },
@@ -72,43 +74,53 @@ class CertificateChecksAlertSource(AlertSource):
                 'type': _type,
             },
             {
-                'id': (await self.middleware.call('openvpn.server.config'))['server_certificate'],
+                'id': (await self.middleware.call('openvpn.server.config'))[
+                    'server_certificate'
+                ],
                 'service': 'OpenVPN Server',
                 'type': _type,
             },
             {
-                'id': (await self.middleware.call('openvpn.client.config'))['client_certificate'],
+                'id': (await self.middleware.call('openvpn.client.config'))[
+                    'client_certificate'
+                ],
                 'service': 'OpenVPN Client',
                 'type': _type,
             },
             {
-                'id': (await self.middleware.call('system.general.config'))['ui_certificate']['id'],
+                'id': (await self.middleware.call('system.general.config'))[
+                    'ui_certificate'
+                ]['id'],
                 'service': 'Web UI',
                 'type': _type,
             },
             {
-                'id': (await self.middleware.call('system.advanced.config'))['syslog_tls_certificate'],
+                'id': (await self.middleware.call('system.advanced.config'))[
+                    'syslog_tls_certificate'
+                ],
                 'service': 'Syslog',
                 'type': _type,
             },
         ]
-        return service_certs
 
     async def _get_cas(self):
         _type = 'root certificate authority'
-        ca_certs = [
+        return [
             {
-                'id': (await self.middleware.call('openvpn.server.config'))['root_ca'],
+                'id': (await self.middleware.call('openvpn.server.config'))[
+                    'root_ca'
+                ],
                 'service': 'Web UI',
                 'type': _type,
             },
             {
-                'id': (await self.middleware.call('openvpn.client.config'))['root_ca'],
+                'id': (await self.middleware.call('openvpn.client.config'))[
+                    'root_ca'
+                ],
                 'service': 'Syslog',
                 'type': _type,
             },
         ]
-        return ca_certs
 
     async def check(self):
         alerts = []
@@ -148,10 +160,12 @@ class CertificateChecksAlertSource(AlertSource):
                 parsed[cert['id']] = cert['revoked']
 
         # check the parsed certificate(s) for revocation
-        for i in filter(lambda i: parsed.get(i['id']), check_for_revocation):
-            alerts.append(Alert(
+        alerts.extend(
+            Alert(
                 CertificateRevokedAlertClass,
-                {'service': i['service'], 'type': i['type']}
-            ))
+                {'service': i['service'], 'type': i['type']},
+            )
+            for i in filter(lambda i: parsed.get(i['id']), check_for_revocation)
+        )
 
         return alerts

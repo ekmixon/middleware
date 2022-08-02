@@ -37,19 +37,17 @@ class Event(TEvent):
         The real fix would be to patch python to use pthread_cond_timedwait
         with a CLOCK_MONOTINOC clock however this should do for now.
         """
-        if timeout:
-            endtime = time.monotonic() + timeout
-            while True:
-                if not super(Event, self).wait(timeout):
-                    if endtime - time.monotonic() > 0:
-                        timeout = endtime - time.monotonic()
-                        if timeout > 0:
-                            continue
-                    return False
-                else:
-                    return True
-        else:
+        if not timeout:
             return super(Event, self).wait()
+        endtime = time.monotonic() + timeout
+        while True:
+            if super(Event, self).wait(timeout):
+                return True
+            if endtime - time.monotonic() > 0:
+                timeout = endtime - time.monotonic()
+                if timeout > 0:
+                    continue
+            return False
 
 
 CALL_TIMEOUT = int(os.environ.get('CALL_TIMEOUT', 60))
@@ -77,7 +75,7 @@ class WSClient(WebSocketClient):
             IP_PORTRANGE_LOW = 2
 
             n_retries = 5
-            for retry in range(n_retries):
+            for _ in range(n_retries):
                 self.sock.setsockopt(socket.IPPROTO_IP, IP_PORTRANGE, IP_PORTRANGE_LOW)
 
                 try:
@@ -85,8 +83,6 @@ class WSClient(WebSocketClient):
                     return
                 except OSError:
                     time.sleep(0.1)
-                    continue
-
         else:
 
             # linux doesn't have a mechanism to allow the kernel to dynamically
@@ -248,7 +244,7 @@ class ErrnoMixin:
     @classmethod
     def _get_errname(cls, code):
         if LIBZFS and 2000 <= code <= 2100:
-            return 'EZFS_' + ZFSError(code).name
+            return f'EZFS_{ZFSError(code).name}'
         for k, v in cls.__dict__.items():
             if k.startswith("E") and v == code:
                 return k
@@ -271,10 +267,7 @@ Error = namedtuple('Error', ['attribute', 'errmsg', 'errcode'])
 
 class ValidationErrors(ClientException):
     def __init__(self, errors):
-        self.errors = []
-        for e in errors:
-            self.errors.append(Error(e[0], e[1], e[2]))
-
+        self.errors = [Error(e[0], e[1], e[2]) for e in errors]
         super().__init__(str(self))
 
     def __str__(self):
@@ -338,12 +331,10 @@ class Client(object):
         elif msg == 'failed':
             raise ClientException('Unsupported protocol version')
         elif msg == 'pong' and _id is not None:
-            ping_event = self._pings.get(_id)
-            if ping_event:
+            if ping_event := self._pings.get(_id):
                 ping_event.set()
         elif _id is not None and msg == 'result':
-            call = self._calls.get(_id)
-            if call:
+            if call := self._calls.get(_id):
                 call.result = message.get('result')
                 if 'error' in message:
                     call.errno = message['error'].get('error')
@@ -466,10 +457,7 @@ class Client(object):
 
         if job:
             jobobj = Job(self, c.result, callback=kwargs.get('callback'))
-            if job == 'RETURN':
-                return jobobj
-            return jobobj.result()
-
+            return jobobj if job == 'RETURN' else jobobj.result()
         return c.result
 
     @staticmethod
@@ -515,9 +503,7 @@ class Client(object):
             'id': _id,
         })
 
-        if not event.wait(timeout):
-            return False
-        return True
+        return bool(event.wait(timeout))
 
     def close(self):
         self._ws.close()
@@ -639,9 +625,12 @@ def main():
     elif args.name == 'sql':
         with Client(uri=args.uri) as c:
             try:
-                if args.username and args.password:
-                    if not c.call('auth.login', args.username, args.password):
-                        raise ValueError('Invalid username or password')
+                if (
+                    args.username
+                    and args.password
+                    and not c.call('auth.login', args.username, args.password)
+                ):
+                    raise ValueError('Invalid username or password')
             except Exception as e:
                 print("Failed to login: ", e)
                 sys.exit(0)

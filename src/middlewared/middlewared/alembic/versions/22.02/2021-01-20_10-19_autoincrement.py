@@ -25,14 +25,21 @@ def upgrade():
     conn.execute("PRAGMA legacy_alter_table = TRUE")
     for name, sql in conn.execute("SELECT name, sql FROM sqlite_master WHERE type = 'table'").fetchall():
         if m := re.match(r'CREATE TABLE "(.+)" \((\s*|.+\s)"?id"? integer (NOT NULL |)PRIMARY KEY[,)]', sql, flags=re.IGNORECASE):
-            table_name = m.group(1)
-            new_sql = m.group(0).replace('PRIMARY KEY', 'PRIMARY KEY AUTOINCREMENT') + sql[len(m.group(0)):]
+            table_name = m[1]
+            new_sql = (
+                m[0].replace('PRIMARY KEY', 'PRIMARY KEY AUTOINCREMENT')
+                + sql[len(m[0]) :]
+            )
+
         elif m := re.match(r'(CREATE TABLE "?(.+) \((\s*|.+\s)"?id"? integer( NOT NULL|),)(.+)'
                            r'\n\s(CONSTRAINT ([a-z_]+) |)PRIMARY KEY \(id\),?',
                            sql, flags=re.IGNORECASE | re.DOTALL):
-            table_name = m.group(2).rstrip('"')
-            new_sql = f'CREATE TABLE {table_name} ({m.group(3)}id integer{m.group(4)} PRIMARY KEY AUTOINCREMENT,' + \
-                      m.group(5) + sql[len(m.group(0)):]
+            table_name = m[2].rstrip('"')
+            new_sql = (
+                f'CREATE TABLE {table_name} ({m[3]}id integer{m[4]} PRIMARY KEY AUTOINCREMENT,'
+                + m[5]
+            ) + sql[len(m[0]) :]
+
             new_sql = new_sql.rstrip().rstrip(')').rstrip().rstrip(',') + '\n)'
         elif re.match(r'CREATE TABLE "(.+)" \("id" integer (NOT NULL |)PRIMARY KEY AUTOINCREMENT,', sql):
             continue
@@ -44,14 +51,18 @@ def upgrade():
             ))
             continue
 
-        index_sqls = []
-        for index_sql, in conn.execute("""
+        index_sqls = [
+            index_sql
+            for (index_sql,) in conn.execute(
+                """
             SELECT sql
             FROM sqlite_master
             WHERE type = 'index' AND tbl_name = ?
-        """, (table_name,)).fetchall():
-            if index_sql is not None:
-                index_sqls.append(index_sql)
+        """,
+                (table_name,),
+            ).fetchall()
+            if index_sql is not None
+        ]
 
         params = {"table": f'"{name}"', "table_old": f'"{name}__old"'}
         conn.execute("ALTER TABLE %(table)s RENAME TO %(table_old)s" % params)

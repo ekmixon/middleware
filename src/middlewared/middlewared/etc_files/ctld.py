@@ -56,7 +56,7 @@ def auth_group_config(auth_tag=None, auth_list=None, auth_type=None, initiator=N
             elif ' ' in initiator.iscsi_target_initiator_initiators:
                 sep = ' '
             inames = initiator.iscsi_target_initiator_initiators.strip('\n').split(sep)
-            inames = [x for x in inames if x != 'ALL' and x != '']
+            inames = [x for x in inames if x not in ['ALL', '']]
         if initiator.iscsi_target_initiator_auth_network:
             sep = '\n'
             if ',' in initiator.iscsi_target_initiator_auth_network:
@@ -64,10 +64,15 @@ def auth_group_config(auth_tag=None, auth_list=None, auth_type=None, initiator=N
             elif ' ' in initiator.iscsi_target_initiator_auth_network:
                 sep = ' '
             inets = initiator.iscsi_target_initiator_auth_network.strip('\n').split(sep)
-            inets = [x for x in inets if x != 'ALL' and x != '']
+            inets = [x for x in inets if x not in ['ALL', '']]
 
     # If nothing left after filtering, then we are done.
-    if not inames and not inets and not auth_list and (auth_type == 'None' or auth_type == 'auto'):
+    if (
+        not inames
+        and not inets
+        and not auth_list
+        and auth_type in ['None', 'auto']
+    ):
         return False
 
     # There are some real paremeters, so write the auth group.
@@ -96,7 +101,7 @@ def auth_group_config(auth_tag=None, auth_list=None, auth_type=None, initiator=N
                 auth.iscsi_target_auth_secret,
             ), plaintextonly=True)
             addline('\tchap "REDACTED" "REDACTED"\n', shadowonly=True)
-    if not auth_list and (auth_type == 'None' or auth_type == 'auto'):
+    if not auth_list and auth_type in ['None', 'auto']:
         addline('\tauth-type "none"\n')
     addline('}\n\n')
     return True

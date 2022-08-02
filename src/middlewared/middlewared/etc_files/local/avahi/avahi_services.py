@@ -46,23 +46,19 @@ class mDNSService(object):
         self.port = None
 
     def _is_system_service(self):
-        if self.service in ['DEV_INFO', 'HTTP']:
-            return True
-        else:
-            return False
+        return self.service in ['DEV_INFO', 'HTTP']
 
     def _is_running(self):
         if self._is_system_service():
             return True
 
         if self.service == 'ADISK':
-            smb_is_running = any(filter_list(
-                self.service_info, [('service', '=', 'cifs'), GENERATE_SERVICE_FILTER]
-            ))
-            if smb_is_running:
-                return True
-            else:
-                return False
+            return any(
+                filter_list(
+                    self.service_info,
+                    [('service', '=', 'cifs'), GENERATE_SERVICE_FILTER],
+                )
+            )
 
         if self.service == 'SMB':
             return any(filter_list(self.service_info, [('service', '=', 'cifs'), GENERATE_SERVICE_FILTER]))
@@ -119,19 +115,16 @@ class mDNSService(object):
             else:
                 smb_shares = []
 
-            smb = set([(x['name'], x['path']) for x in smb_shares])
-            if len(smb) == 0:
+            smb = {(x['name'], x['path']) for x in smb_shares}
+            if not smb:
                 return (None, [AvahiConst.AVAHI_IF_UNSPEC])
 
             if smb_shares:
                 iindex = []
-                dkno = 0
                 txtrecord['sys'] = 'waMa=0,adVF=0x100'
-                for i in smb:
+                for dkno, i in enumerate(smb):
                     smb_advu = (list(filter(lambda x: i[0] == x['name'], smb_shares)))[0]['vuid']
                     txtrecord[f'dk{dkno}'] = f'adVN={i[0]},adVF=0x82,adVU={smb_advu}'
-                    dkno += 1
-
                 if smb:
                     smb_iindex = self._get_interfaceindex('SMB')
                     if smb_iindex != [AvahiConst.AVAHI_IF_UNSPEC]:
@@ -183,12 +176,12 @@ class mDNSService(object):
 
                     break
 
-        return iindex if iindex else [AvahiConst.AVAHI_IF_UNSPEC]
+        return iindex or [AvahiConst.AVAHI_IF_UNSPEC]
 
     def generate_services(self):
         mDNSServices = {}
         for srv in ServiceType:
-            mDNSServices.update({srv.name: {}})
+            mDNSServices[srv.name] = {}
             self.service = srv.name
             self.regtype, self.port = ServiceType[self.service].value
             if not self._is_running():
@@ -252,15 +245,13 @@ def get_hostname(middleware):
     This is to ensure that the correct hostname is used for mdns advertisements.
     """
     ngc = middleware.call_sync('network.configuration.config')
-    if 'hostname_virtual' in ngc:
-        failover_status = middleware.call_sync('failover.status')
-        if failover_status == 'MASTER':
-            return ngc['hostname_virtual']
-        elif failover_status == 'BACKUP':
-            return None
-        else:
-            return ngc['hostname_local']
-
+    if 'hostname_virtual' not in ngc:
+        return ngc['hostname_local']
+    failover_status = middleware.call_sync('failover.status')
+    if failover_status == 'BACKUP':
+        return None
+    elif failover_status == 'MASTER':
+        return ngc['hostname_virtual']
     else:
         return ngc['hostname_local']
 

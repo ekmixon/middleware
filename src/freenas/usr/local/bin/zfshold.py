@@ -48,17 +48,17 @@ def main(no_delete, hold, dataset, skipstate):
     print("Checking for holds")
     hold_delete = False
     for snap in snaplist:
-        ret = os.popen("zfs holds %s" % snap).readlines()
+        ret = os.popen(f"zfs holds {snap}").readlines()
         if len(ret) > 1:
             for item in ret[1:]:
                 if item.split()[1] == hold:
                     if no_delete:
-                        print("%s hold found on %s" % (hold, snap))
+                        print(f"{hold} hold found on {snap}")
                     else:
-                        print("Destroying %s hold on %s" % (hold, snap))
-                        ret = os.system("zfs release %s %s" % (item.split()[1], snap))
+                        print(f"Destroying {hold} hold on {snap}")
+                        ret = os.system(f"zfs release {item.split()[1]} {snap}")
                         if ret != 0:
-                            print("Error releasing hold on %s" % snap)
+                            print(f"Error releasing hold on {snap}")
                         else:
                             hold_delete = True
     if not hold_delete:
@@ -69,10 +69,10 @@ def main(no_delete, hold, dataset, skipstate):
         for pool in poollist:
             pool = pool.strip()
             if pool != "freenas-boot":
-                print("Removing freenas:state on %s" % pool)
-                ret = os.system("zfs inherit -r freenas:state %s" % pool)
+                print(f"Removing freenas:state on {pool}")
+                ret = os.system(f"zfs inherit -r freenas:state {pool}")
                 if ret != 0:
-                    print("Error removing freenas:state on %s" % pool)
+                    print(f"Error removing freenas:state on {pool}")
 
 
 if __name__ == "__main__":

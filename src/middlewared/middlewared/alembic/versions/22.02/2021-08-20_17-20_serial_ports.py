@@ -25,11 +25,7 @@ def upgrade():
         return
 
     sys_config = sys_config[0]
-    if sys_config['adv_serialport'] not in io_choices:
-        new_val = 'ttyS0'
-    else:
-        new_val = io_choices[sys_config['adv_serialport']]
-
+    new_val = io_choices.get(sys_config['adv_serialport'], 'ttyS0')
     conn.execute("UPDATE system_advanced SET adv_serialport = ? WHERE id = ?", (new_val, sys_config['id']))
 
 

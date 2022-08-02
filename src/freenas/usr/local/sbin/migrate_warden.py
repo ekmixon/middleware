@@ -70,15 +70,15 @@ class ZFS(object):
 
         for pool in pools:
             if pool.name == self.pool:
-                if pool.status != "UNAVAIL":
-                    match = True
-                else:
+                if pool.status == "UNAVAIL":
                     raise RuntimeError(
                         f"ZFS pool '{self.pool}' is UNAVAIL!\n"
                         f"Please check zpool status {self.pool} for more"
                         " information.")
 
-        return True if match else False
+                else:
+                    match = True
+        return bool(match)
 
     def jail_exists(self):
         """
@@ -108,9 +108,7 @@ class ZFS(object):
                 f"{warden_dataset.name}@WardenMigration_{date}",
                 recursive=True)
         except libzfs.ZFSException as e:
-            if e.code == libzfs.Error.EXISTS:
-                pass  # Snapshot exists.
-            else:
+            if e.code != libzfs.Error.EXISTS:
                 raise
 
         try:
@@ -119,10 +117,11 @@ class ZFS(object):
                 fromname=None,
                 toname=fromsnap,
                 flags={
-                    None if not self.verbose else libzfs.SendFlag.PROGRESS,
-                    libzfs.SendFlag.PROPS
-                }
+                    libzfs.SendFlag.PROGRESS if self.verbose else None,
+                    libzfs.SendFlag.PROPS,
+                },
             )
+
         finally:
             try:
                 os.close(send_fd)
@@ -182,9 +181,7 @@ class Migrate(object):
                   "Please supply a valid pool for iocage usage.")
             exit(1)
 
-        migrated = self.ZFS.jail_exists()
-
-        if migrated:
+        if migrated := self.ZFS.jail_exists():
             print(f"  {self.jail} already exists in iocage, please destroy it"
                   " first.")
             return
@@ -193,10 +190,7 @@ class Migrate(object):
         props = {}
 
         for ioc_prop, warden_prop in files.items():
-            prop = self.jail_props(warden_prop)
-
-            # If prop is empty, the 'prop' didn't exist in Warden
-            if prop:
+            if prop := self.jail_props(warden_prop):
                 if prop == "DHCP":
                     props["dhcp"] = "yes"
                     props["bpf"] = "yes"
@@ -208,9 +202,7 @@ class Migrate(object):
                     props[ioc_prop] = prop
 
         self.activate_pool()
-        running = self.is_jail_running()
-
-        if running:
+        if running := self.is_jail_running():
             print(f"  {self.jail} is running, please stop it first.")
             return
 
@@ -250,8 +242,8 @@ class Migrate(object):
         cmd = ["jls", "--libxo", "json"]
         jls_json = json.loads(su.check_output(cmd))["jail-information"]["jail"]
 
+        p = f"{self.dir}/{self.jail}"
         for jail in jls_json:
-            p = f"{self.dir}/{self.jail}"
             _p = jail["path"]
 
             if p == _p:
@@ -275,9 +267,7 @@ class Migrate(object):
                         _p = _p.replace(".", "_", 1).replace("true", "1")
                     else:
                         _p = _p.replace(".", "_").replace("true", "1")
-                elif prop == "vnet":
-                    _p = "on"
-                elif prop == "autostart":
+                elif prop in ["vnet", "autostart"]:
                     _p = "on"
                 elif prop == "nat":
                     print("  NAT isn't supported by iocage, not migrating"
@@ -411,7 +401,7 @@ async def main(argv, loop):
         elif opt in ("-v", "--verbose"):
             verbose = True
 
-    if len(jails) == 0:
+    if not jails:
         jails.append("ALL")
 
     if _dir is None:
@@ -422,7 +412,7 @@ async def main(argv, loop):
         print("Must specify the destination pool for iocage!")
         exit(1)
 
-    _all = True if jails[0].lower() == "all" else False
+    _all = jails[0].lower() == "all"
     if _all:
         jails = [j for j in os.listdir(_dir) if os.path.isdir(f"{_dir}/{j}") and
                  not j.startswith(".")]

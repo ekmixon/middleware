@@ -46,9 +46,13 @@ if __name__ == "__main__":
         current_mem = psutil.virtual_memory().total / 1024
         cmdline.append(f"crashkernel={400 + math.ceil(current_mem / 16 / 1024 / 1024)}M")
 
-    config.append(f'GRUB_TERMINAL="{" ".join(terminal)}"')
-    config.append(f'GRUB_CMDLINE_LINUX="{" ".join(cmdline)}"')
-    config.append("")
+    config.extend(
+        (
+            f'GRUB_TERMINAL="{" ".join(terminal)}"',
+            f'GRUB_CMDLINE_LINUX="{" ".join(cmdline)}"',
+            "",
+        )
+    )
 
     if osc.IS_FREEBSD:
         path = "/usr/local/etc/default/grub"

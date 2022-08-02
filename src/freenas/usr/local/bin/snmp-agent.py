@@ -36,8 +36,6 @@ def get_Kstat():
 
 
 def get_arc_efficiency(Kstat):
-    output = {}
-
     if "vfs.zfs.version.spa" not in Kstat:
         return
 
@@ -74,7 +72,7 @@ def get_arc_efficiency(Kstat):
     prefetch_data_total = (prefetch_data_hits + prefetch_data_misses)
     real_hits = (mfu_hits + mru_hits)
 
-    output["total_accesses"] = fHits(arc_accesses_total)
+    output = {"total_accesses": fHits(arc_accesses_total)}
     output["cache_hit_ratio"] = {
         'per': fPerc(arc_hits, arc_accesses_total),
         'num': fHits(arc_hits),
@@ -172,21 +170,21 @@ def fHits(Hits=0, Decimal=2):
     Shits = (10 ** 24)
 
     if Hits >= Shits:
-        return str("%0." + str(Decimal) + "f") % (Hits / Shits) + "S"
+        return str(f"%0.{str(Decimal)}f") % (Hits / Shits) + "S"
     elif Hits >= shits:
-        return str("%0." + str(Decimal) + "f") % (Hits / shits) + "s"
+        return str(f"%0.{str(Decimal)}f") % (Hits / shits) + "s"
     elif Hits >= Qhits:
-        return str("%0." + str(Decimal) + "f") % (Hits / Qhits) + "Q"
+        return str(f"%0.{str(Decimal)}f") % (Hits / Qhits) + "Q"
     elif Hits >= qhits:
-        return str("%0." + str(Decimal) + "f") % (Hits / qhits) + "q"
+        return str(f"%0.{str(Decimal)}f") % (Hits / qhits) + "q"
     elif Hits >= thits:
-        return str("%0." + str(Decimal) + "f") % (Hits / thits) + "t"
+        return str(f"%0.{str(Decimal)}f") % (Hits / thits) + "t"
     elif Hits >= bhits:
-        return str("%0." + str(Decimal) + "f") % (Hits / bhits) + "b"
+        return str(f"%0.{str(Decimal)}f") % (Hits / bhits) + "b"
     elif Hits >= mhits:
-        return str("%0." + str(Decimal) + "f") % (Hits / mhits) + "m"
+        return str(f"%0.{str(Decimal)}f") % (Hits / mhits) + "m"
     elif Hits >= khits:
-        return str("%0." + str(Decimal) + "f") % (Hits / khits) + "k"
+        return str(f"%0.{str(Decimal)}f") % (Hits / khits) + "k"
     elif Hits == 0:
         return str("%d" % 0)
     else:
@@ -195,9 +193,9 @@ def fHits(Hits=0, Decimal=2):
 
 def fPerc(lVal=0, rVal=0, Decimal=2):
     if rVal > 0:
-        return str("%0." + str(Decimal) + "f") % (100 * (lVal / rVal)) + "%"
+        return str(f"%0.{str(Decimal)}f") % (100 * (lVal / rVal)) + "%"
     else:
-        return str("%0." + str(Decimal) + "f") % 100 + "%"
+        return str(f"%0.{str(Decimal)}f") % 100 + "%"
 
 
 def calculate_allocation_units(*args):
@@ -216,11 +214,7 @@ def get_zfs_arc_miss_percent(kstat):
     arc_hits = kstat["kstat.zfs.misc.arcstats.hits"]
     arc_misses = kstat["kstat.zfs.misc.arcstats.misses"]
     arc_read = arc_hits + arc_misses
-    if arc_read > 0:
-        hit_percent = float(100 * arc_hits / arc_read)
-        miss_percent = 100 - hit_percent
-        return miss_percent
-    return 0
+    return 100 - float(100 * arc_hits / arc_read) if arc_read > 0 else 0
 
 
 mib_builder = pysnmp.smi.builder.MibBuilder()

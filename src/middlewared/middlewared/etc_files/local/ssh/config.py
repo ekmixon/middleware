@@ -4,10 +4,7 @@ import re
 
 from middlewared.utils import osc
 
-if osc.IS_FREEBSD:
-    SSH_CONFIG_PATH = '/usr/local/etc/ssh'
-else:
-    SSH_CONFIG_PATH = '/etc/ssh'
+SSH_CONFIG_PATH = '/usr/local/etc/ssh' if osc.IS_FREEBSD else '/etc/ssh'
 
 
 def generate_ssh_config(middleware):
@@ -20,8 +17,7 @@ def generate_ssh_config(middleware):
     ]:
         s_key = re.sub(r'([.-])', '_', k).replace('ssh_', '', 1)
         if ssh_config[s_key]:
-            decoded_key = base64.b64decode(ssh_config[s_key])
-            if decoded_key:
+            if decoded_key := base64.b64decode(ssh_config[s_key]):
                 with open(os.path.join(SSH_CONFIG_PATH, k), 'wb') as f:
                     f.write(decoded_key)
 

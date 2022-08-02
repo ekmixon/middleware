@@ -7,13 +7,7 @@ import shutil
 def render_certificates(s3, middleware):
     minio_path = '/usr/local/etc/minio'
 
-    cert = s3.get('certificate')
-    if not cert:
-        # We do this so that minio does not pick up certs in this directory and sets itself in https mode even
-        # though configuration does not has any certificate in db set and these are old leftovers.
-        shutil.rmtree(minio_path, ignore_errors=True)
-        return
-    else:
+    if cert := s3.get('certificate'):
         middleware.call_sync('certificate.cert_services_validation', cert, 's3.certificate')
 
         cert = middleware.call_sync('certificate.get_instance', cert)
@@ -40,6 +34,11 @@ def render_certificates(s3, middleware):
             f.write(cert['privatekey'])
         os.chown(minio_privatekey, minio_uid, minio_gid)
         os.chmod(minio_privatekey, 0o600)
+    else:
+        # We do this so that minio does not pick up certs in this directory and sets itself in https mode even
+        # though configuration does not has any certificate in db set and these are old leftovers.
+        shutil.rmtree(minio_path, ignore_errors=True)
+        return
 
 
 def configure_minio_sys_dir(s3):

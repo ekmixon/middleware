@@ -27,47 +27,42 @@ async def get_exports(middleware, config, shares, has_nfs_principal):
 
 
 def build_share(config, share):
-    if share["paths"]:
-        result = list(share["paths"])
+    if not share["paths"]:
+        return []
+    result = list(share["paths"])
 
-        if share["alldirs"]:
-            result.append("-alldirs")
+    if share["alldirs"]:
+        result.append("-alldirs")
 
-        if share["ro"]:
-            result.append("-ro")
+    if share["ro"]:
+        result.append("-ro")
 
-        if share["quiet"]:
-            result.append("-quiet")
+    if share["quiet"]:
+        result.append("-quiet")
 
-        if share["mapall_user"]:
-            s = '-mapall="' + share["mapall_user"].replace('\\', '\\\\') + '"'
-            if share["mapall_group"]:
-                s += ':"' + share["mapall_group"].replace('\\', '\\\\') + '"'
-            result.append(s)
-        elif share["maproot_user"]:
-            s = '-maproot="' + share["maproot_user"].replace('\\', '\\\\') + '"'
-            if share["maproot_group"]:
-                s += ':"' + share["maproot_group"].replace('\\', '\\\\') + '"'
-            result.append(s)
+    if share["mapall_user"]:
+        s = '-mapall="' + share["mapall_user"].replace('\\', '\\\\') + '"'
+        if share["mapall_group"]:
+            s += ':"' + share["mapall_group"].replace('\\', '\\\\') + '"'
+        result.append(s)
+    elif share["maproot_user"]:
+        s = '-maproot="' + share["maproot_user"].replace('\\', '\\\\') + '"'
+        if share["maproot_group"]:
+            s += ':"' + share["maproot_group"].replace('\\', '\\\\') + '"'
+        result.append(s)
 
-        if config["v4"] and share["security"]:
-            result.append("-sec=" + ":".join([s.lower() for s in share["security"]]))
+    if config["v4"] and share["security"]:
+        result.append("-sec=" + ":".join([s.lower() for s in share["security"]]))
 
-        targets = build_share_targets(share)
-        if targets:
-            return [" ".join(result + [target])
-                    for target in targets]
-        else:
-            return [" ".join(result)]
-
-    return []
+    return (
+        [" ".join(result + [target]) for target in targets]
+        if (targets := build_share_targets(share))
+        else [" ".join(result)]
+    )
 
 
 def build_share_targets(share):
-    result = []
-
-    for network in share["networks"]:
-        result.append("-network " + network)
+    result = [f"-network {network}" for network in share["networks"]]
 
     if share["hosts"]:
         result.append(" ".join(share["hosts"]))

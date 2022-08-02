@@ -36,14 +36,14 @@ class FreeNASBMCAlertSource(ThreadedAlertSource):
             reg = re.search(r"Firmware Revision.*: (\S+)", mcinfo, flags=re.M)
             if not reg:
                 return
-            fwver = reg.group(1)
+            fwver = reg[1]
             try:
                 fwver = [int(i) for i in fwver.split(".")]
             except ValueError:
-                logger.warning("Failed to parse BMC firmware version: {}".format(fwver))
+                logger.warning(f"Failed to parse BMC firmware version: {fwver}")
                 return
 
-            if len(fwver) < 2 or not(fwver[0] == 0 and fwver[1] < 30):
+            if len(fwver) < 2 or fwver[0] != 0 or fwver[1] >= 30:
                 return
 
             return Alert(FreeNASBMCAlertClass)

@@ -25,9 +25,13 @@ def object_hook(obj):
             return datetime.fromtimestamp(obj['$date'] / 1000, tz=timezone.utc) + timedelta(milliseconds=obj['$date'] % 1000)
         if '$time' in obj:
             return time(*[int(i) for i in obj['$time'].split(':')])
-    if obj_len == 2 and '$type' in obj and '$value' in obj:
-        if obj['$type'] == 'date':
-            return date(*[int(i) for i in obj['$value'].split('-')])
+    if (
+        obj_len == 2
+        and '$type' in obj
+        and '$value' in obj
+        and obj['$type'] == 'date'
+    ):
+        return date(*[int(i) for i in obj['$value'].split('-')])
     return obj
 
 

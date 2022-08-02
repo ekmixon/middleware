@@ -59,18 +59,18 @@ def write_certificates(certs, cacerts):
 
 def write_crls(cas, middleware):
     for ca in cas:
-        crl = middleware.call_sync(
+        if crl := middleware.call_sync(
             'cryptokey.generate_crl',
-            ca, list(
+            ca,
+            list(
                 filter(
                     lambda cert: cert['revoked_date'],
                     middleware.call_sync(
                         'certificateauthority.get_ca_chain', ca['id']
-                    )
+                    ),
                 )
-            )
-        )
-        if crl:
+            ),
+        ):
             with open(ca['crl_path'], 'w') as f:
                 f.write(crl)
 

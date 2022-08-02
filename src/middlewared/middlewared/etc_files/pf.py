@@ -21,7 +21,6 @@ def render(service, middleware):
                 middleware.logger.warning(
                     f'Failed to remove {PF_BLOCK_FILE} with error: {e}'
                 )
-                pass
         return
 
     interfaces = middleware.call_sync('interface.query')

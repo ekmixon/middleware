@@ -15,7 +15,7 @@ setup(
     include_package_data=True,
     license='BSD',
     platforms='any',
-    namespace_packages=[str('middlewared')],
+    namespace_packages=['middlewared'],
     classifiers=[
         'Development Status :: 4 - Beta',
         'Intended Audience :: Developers',

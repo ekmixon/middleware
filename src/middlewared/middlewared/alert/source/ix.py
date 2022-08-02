@@ -38,5 +38,5 @@ class IxAlertSource(AlertSource):
             if unfilled:
                 return Alert(
                     IxAlertClass,
-                    'Please complete these fields on the System/Proactive Support page: %s.' % ', '.join(unfilled)
+                    f"Please complete these fields on the System/Proactive Support page: {', '.join(unfilled)}.",
                 )

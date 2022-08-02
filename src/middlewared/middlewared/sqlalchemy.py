@@ -65,9 +65,8 @@ class JSON(UserDefinedType):
         return "TEXT"
 
     def _bind_processor(self, value):
-        if value is None:
-            if self.type is not None:
-                value = self.type()
+        if value is None and self.type is not None:
+            value = self.type()
         result = json.dumps(value)
         if self.encrypted:
             result = encrypt(result)
@@ -82,10 +81,7 @@ class JSON(UserDefinedType):
                 value = decrypt(value, _raise=True)
             return json.loads(value)
         except Exception:
-            if self.type is not None:
-                return self.type()
-            else:
-                return None
+            return self.type() if self.type is not None else None
 
     def result_processor(self, dialect, coltype):
         return self._result_processor
@@ -96,10 +92,7 @@ class MultiSelectField(UserDefinedType):
         return "TEXT"
 
     def _bind_processor(self, value):
-        if value is None:
-            return None
-
-        return ",".join(value)
+        return None if value is None else ",".join(value)
 
     def bind_processor(self, dialect):
         return self._bind_processor

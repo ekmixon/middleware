@@ -42,11 +42,10 @@ def generate_webdav_config(service, middleware):
             # Empty webdav.conf
             with open(f'{apache_dir}/Includes/webdav.conf', 'w+') as f:
                 pass
-    else:
-        if webdav_config['protocol'] == 'HTTP':
-            # Empty webdav-ssl.conf
-            with open(f'{apache_dir}/Includes/webdav-ssl.conf', 'w+') as f:
-                pass
+    elif webdav_config['protocol'] == 'HTTP':
+        # Empty webdav-ssl.conf
+        with open(f'{apache_dir}/Includes/webdav-ssl.conf', 'w+') as f:
+            pass
 
 
 def render(service, middleware):

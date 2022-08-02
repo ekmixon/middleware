@@ -41,14 +41,10 @@ for dev in devs:
         # check to see if there's output from a previous run
         data = {}
         if os.path.isfile(PERSIST_DATA):
-            pkl_file = open(PERSIST_DATA, "rb")
-            data = pickle.load(pkl_file)
-            pkl_file.close()
-
-        temp_list = []
+            with open(PERSIST_DATA, "rb") as pkl_file:
+                data = pickle.load(pkl_file)
         ret = os.popen("/usr/sbin/mfiutil show events -c crit").readlines()
-        for line in ret:
-            temp_list.append(line.strip().split(" "))
+        temp_list = [line.strip().split(" ") for line in ret]
         send_email = False
         for line in temp_list:
             key = line[0]
@@ -56,12 +52,8 @@ for dev in devs:
                 data[line[0]] = " ".join(line[1:])
                 send_email = True
 
-        # Cache the controller log for future runs.  This is done so
-        # that an email alert is only sent for new events
-        pkl_file = open(PERSIST_DATA, "wb")
-        pickle.dump(data, pkl_file, -1)
-        pkl_file.close()
-
+        with open(PERSIST_DATA, "wb") as pkl_file:
+            pickle.dump(data, pkl_file, -1)
         if send_email:
             conn = sqlite3.connect("/data/freenas-v1.db")
             c = conn.cursor()
@@ -69,9 +61,10 @@ for dev in devs:
             for row in c:
                 to_addr = str(row[0])
             if len(to_addr) > 0:
-                fm = os.popen("""grep -E '^root:' /etc/aliases | """
-                              """awk '{print $2'}""").readlines()
-                if fm:
+                if fm := os.popen(
+                    """grep -E '^root:' /etc/aliases | """
+                    """awk '{print $2'}"""
+                ).readlines():
                     for line in fm:
                          addy = line.strip()
                 else:
@@ -80,9 +73,7 @@ for dev in devs:
                     # remove the cached controller log
                     os.remove(PERSIST_DATA)
                     sys.exit()
-                message = ""
-                for key in list(data.keys()):
-                    message += key + " " + data[key] + "\n"
+                message = "".join(f"{key} {data[key]}" + "\n" for key in list(data.keys()))
                 cmd = """echo '%s' | mailx -s 'RAID status' %s""" % (message, addy)
                 p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
                 output, errors = p.communicate()

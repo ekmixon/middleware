@@ -93,10 +93,7 @@ class CrashReporting(object):
         if os.path.exists(self.sentinel_file_path) or 'CRASHREPORTING_DISABLED' in os.environ:
             return True
 
-        if os.stat(__file__).st_dev != os.stat('/').st_dev:
-            return True
-
-        return False
+        return os.stat(__file__).st_dev != os.stat('/').st_dev
 
     def report(self, exc_info, log_files):
         """"

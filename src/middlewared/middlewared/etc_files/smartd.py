@@ -12,16 +12,17 @@ logger = logging.getLogger(__name__)
 
 async def annotate_disk_for_smart(middleware, devices, disk, smartoptions):
     args = await get_smartctl_args(middleware, devices, disk, smartoptions)
-    if args:
-        if (
+    if args and (
+        (
             # On Enterprise hardware we only use S.M.A.R.T.-enabled disks, there is no need to check for this
             # every time.
-            await middleware.call('system.is_enterprise_ix_hardware') or
-            await ensure_smart_enabled(args)
-        ):
-            args.extend(["-a"])
-            args.extend(["-d", "removable"])
-            return disk, dict(smartctl_args=args)
+            await middleware.call('system.is_enterprise_ix_hardware')
+            or await ensure_smart_enabled(args)
+        )
+    ):
+        args.extend(["-a"])
+        args.extend(["-d", "removable"])
+        return disk, dict(smartctl_args=args)
 
 
 async def ensure_smart_enabled(args):
@@ -39,9 +40,8 @@ async def ensure_smart_enabled(args):
     p = await smartctl(args + ["-s", "on"], stderr=subprocess.STDOUT, check=False)
     if p.returncode == 0:
         return True
-    else:
-        logger.debug("Unable to enable smart on %r", args)
-        return False
+    logger.debug("Unable to enable smart on %r", args)
+    return False
 
 
 def get_smartd_config(disk):
@@ -56,7 +56,11 @@ def get_smartd_config(disk):
     config += " -m root -M exec /usr/local/libexec/smart_alert.py"
 
     if disk.get('smarttest_type'):
-        config += f"\\\n-s {disk['smarttest_type']}/" + get_smartd_schedule(disk) + "\\\n"
+        config += (
+            f"\\\n-s {disk['smarttest_type']}/{get_smartd_schedule(disk)}"
+            + "\\\n"
+        )
+
 
     return config
 
@@ -81,15 +85,16 @@ def get_smartd_schedule_piece(value, min, max, enum=None):
 
     if value == "*":
         return "." * width
-    m = re.match(r"((?P<min>[0-9]+)-(?P<max>[0-9]+)|\*)/(?P<divisor>[0-9]+)", value)
-    if m:
-        d = int(m.group("divisor"))
-        if m.group("min") is None:
+    if m := re.match(
+        r"((?P<min>[0-9]+)-(?P<max>[0-9]+)|\*)/(?P<divisor>[0-9]+)", value
+    ):
+        d = int(m["divisor"])
+        if m["min"] is None:
             if d == 1:
                 return "." * width
         else:
-            min = int(m.group("min"))
-            max = int(m.group("max"))
+            min = int(m["min"])
+            max = int(m["max"])
         values = [v for v in range(min, max + 1) if v % d == 0]
     else:
         values = list(filter(lambda v: v is not None,
@@ -123,14 +128,7 @@ async def render(service, middleware):
                                                     16)))
     disks = [dict(disk, **annotated[disk["disk_name"]]) for disk in disks if disk["disk_name"] in annotated]
 
-    config = ""
-    for disk in disks:
-        config += get_smartd_config(disk) + "\n"
-
-    if osc.IS_FREEBSD:
-        path = "/usr/local/etc/smartd.conf"
-    else:
-        path = "/etc/smartd.conf"
-
+    config = "".join(get_smartd_config(disk) + "\n" for disk in disks)
+    path = "/usr/local/etc/smartd.conf" if osc.IS_FREEBSD else "/etc/smartd.conf"
     with open(path, "w") as f:
         f.write(config)

@@ -30,10 +30,11 @@ def upgrade():
 
         ssh_weak_ciphers = ['AES128-CBC', 'NONE']
 
-        m = re.search('NoneEnabled\s+(yes|no)', row['ssh_options'], flags=re.IGNORECASE)
-        if m:
-            row['ssh_options'] = row['ssh_options'].replace(m.group(0), '')
-            if m.group(1).lower() == 'no':
+        if m := re.search(
+            'NoneEnabled\s+(yes|no)', row['ssh_options'], flags=re.IGNORECASE
+        ):
+            row['ssh_options'] = row['ssh_options'].replace(m[0], '')
+            if m[1].lower() == 'no':
                 ssh_weak_ciphers.remove('NONE')
 
         if 'Ciphers' in row['ssh_options']:

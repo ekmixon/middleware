@@ -33,7 +33,7 @@ def get_firmware(prefix):
     for item in os.listdir(FWPATH):
         if item.startswith(prefix):
             if m := re.match(r".+\.([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)\.bin$", item):
-                return Firmware(os.path.join(FWPATH, item), version.parse(m.group(1)))
+                return Firmware(os.path.join(FWPATH, item), version.parse(m[1]))
 
     logger.error("Unable to find firmware file with prefix %r", prefix)
     return None

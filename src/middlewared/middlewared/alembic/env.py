@@ -15,9 +15,8 @@ from middlewared.utils.plugins import load_modules
 from middlewared.utils.python import get_middlewared_dir
 
 # freenasOS
-if osc.IS_FREEBSD:
-    if '/usr/local/lib' not in sys.path:
-        sys.path.append('/usr/local/lib')
+if osc.IS_FREEBSD and '/usr/local/lib' not in sys.path:
+    sys.path.append('/usr/local/lib')
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -74,10 +73,13 @@ def drop_references(operations, operation):
 
 def drop_references_impl(self, column_name):
     for constraint in self.unnamed_constraints:
-        if isinstance(constraint, ForeignKeyConstraint) and len(constraint.columns) == 1:
-            if list(constraint.columns)[0].name == column_name:
-                self.unnamed_constraints.remove(constraint)
-                break
+        if (
+            isinstance(constraint, ForeignKeyConstraint)
+            and len(constraint.columns) == 1
+            and list(constraint.columns)[0].name == column_name
+        ):
+            self.unnamed_constraints.remove(constraint)
+            break
 
 
 BatchOperationsImpl.drop_references = lambda self, column: self.batch.append(("drop_references", (column,), {}))
@@ -85,20 +87,13 @@ ApplyBatchImpl.drop_references = drop_references_impl
 
 
 def include_object(object, name, type_, reflected, compare_to):
-    if type_ == "table" and name in {"sqlite_sequence"}:
-        return False
-    else:
-        return True
+    return type_ != "table" or name not in {"sqlite_sequence"}
 
 
 def render_item(type_, obj, autogen_context):
     """Apply custom rendering for selected items."""
 
-    if isinstance(obj, JSON):
-        return "sa.TEXT()"
-
-    # default rendering for other objects
-    return False
+    return "sa.TEXT()" if isinstance(obj, JSON) else False
 
 
 def run_migrations_offline():

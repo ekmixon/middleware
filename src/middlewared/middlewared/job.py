@@ -155,7 +155,7 @@ class JobsQueue(object):
                 if lock is None or not lock.locked():
                     found = job
                     if lock:
-                        await job.set_lock(lock)
+                        await found.set_lock(lock)
                     break
             if found:
                 # Unlocked job found to run
@@ -327,12 +327,11 @@ class Job(object):
             await self._finished.wait()
         else:
             await asyncio.wait_for(asyncio.shield(self._finished.wait()), timeout)
-        if raise_error:
-            if self.error:
-                if isinstance(self.exc_info[1], CallError):
-                    raise self.exc_info[1]
+        if raise_error and self.error:
+            if isinstance(self.exc_info[1], CallError):
+                raise self.exc_info[1]
 
-                raise CallError(self.error)
+            raise CallError(self.error)
         return self.result
 
     def wait_sync(self, raise_error=False):
@@ -347,12 +346,11 @@ class Job(object):
 
         fut.add_done_callback(done)
         event.wait()
-        if raise_error:
-            if self.error:
-                if isinstance(self.exc_info[1], CallError):
-                    raise self.exc_info[1]
+        if raise_error and self.error:
+            if isinstance(self.exc_info[1], CallError):
+                raise self.exc_info[1]
 
-                raise CallError(self.error)
+            raise CallError(self.error)
         return self.result
 
     def abort(self):
@@ -424,31 +422,32 @@ class Job(object):
             self.set_progress(100, '')
 
     async def __close_logs(self):
-        if self.logs_fd:
-            self.logs_fd.close()
+        if not self.logs_fd:
+            return
+        self.logs_fd.close()
 
-            def get_logs_excerpt():
-                head = []
-                tail = []
-                lines = 0
-                with open(self.logs_path, "r", encoding="utf-8", errors="ignore") as f:
-                    for line in f:
-                        if len(head) < 10:
-                            head.append(line)
-                        else:
-                            tail.append(line)
-                            tail = tail[-10:]
+        def get_logs_excerpt():
+            head = []
+            tail = []
+            lines = 0
+            with open(self.logs_path, "r", encoding="utf-8", errors="ignore") as f:
+                for line in f:
+                    if len(head) < 10:
+                        head.append(line)
+                    else:
+                        tail.append(line)
+                        tail = tail[-10:]
 
-                        lines += 1
+                    lines += 1
 
-                if lines > 20:
-                    excerpt = "%s... %d more lines ...\n%s" % ("".join(head), lines - 20, "".join(tail))
-                else:
-                    excerpt = "".join(head + tail)
+            if lines > 20:
+                excerpt = "%s... %d more lines ...\n%s" % ("".join(head), lines - 20, "".join(tail))
+            else:
+                excerpt = "".join(head + tail)
 
-                return excerpt
+            return excerpt
 
-            self.logs_excerpt = await self.middleware.run_in_thread(get_logs_excerpt)
+        self.logs_excerpt = await self.middleware.run_in_thread(get_logs_excerpt)
 
     async def __close_pipes(self):
         def close_pipes():
@@ -505,10 +504,8 @@ class Job(object):
         This is useful when we want to run a job inside a job.
         """
         while not subjob.time_finished:
-            try:
+            with contextlib.suppress(asyncio.TimeoutError):
                 await subjob.wait(1)
-            except asyncio.TimeoutError:
-                pass
             self.set_progress(**subjob.progress)
         if subjob.exception:
             raise CallError(subjob.exception)
@@ -516,10 +513,8 @@ class Job(object):
 
     def cleanup(self):
         if self.logs_path:
-            try:
+            with contextlib.suppress(Exception):
                 os.unlink(self.logs_path)
-            except Exception:
-                pass
 
     def stop_logging(self):
         fd = self.logs_fd

@@ -17,8 +17,9 @@ async def check_path_resides_within_volume(verrors, middleware, name, path, glus
     rp = os.path.realpath(path)
     vol_names = [vol["vol_name"] for vol in await middleware.call("datastore.query", "storage.volume")]
     vol_paths = [os.path.join("/mnt", vol_name) for vol_name in vol_names]
-    if not path.startswith("/mnt/") or not any(
-        os.path.commonpath([parent]) == os.path.commonpath([parent, rp]) for parent in vol_paths
+    if not path.startswith("/mnt/") or all(
+        os.path.commonpath([parent]) != os.path.commonpath([parent, rp])
+        for parent in vol_paths
     ):
         verrors.add(name, "The path must reside within a pool mount point")
 
@@ -36,7 +37,7 @@ async def check_path_resides_within_volume(verrors, middleware, name, path, glus
             using_gluster_path = True
         else:
             # subtract 2 here to remove the '/' and 'mnt' parents
-            for i in range(0, len(rp.parents) - 2):
+            for i in range(len(rp.parents) - 2):
                 if rp.parents[i].is_mount() and rp.parents[i].name == ".glusterfs":
                     using_gluster_path = True
                     break

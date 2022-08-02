@@ -29,10 +29,7 @@ class EventSourceManager:
         return shortname, arg
 
     def get_full_name(self, name, arg):
-        if arg is None:
-            return name
-        else:
-            return f'{name}:{arg}'
+        return name if arg is None else f'{name}:{arg}'
 
     def register(self, name, event_source):
         if not issubclass(event_source, EventSource):

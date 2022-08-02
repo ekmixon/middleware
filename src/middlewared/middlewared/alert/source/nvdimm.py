@@ -51,9 +51,8 @@ def parse_sysctl(s):
 
 
 def parse_bit_set(s):
-    m = re.match(r"(0x[0-9a-f]+)<(.+)>", s)
-    if m:
-        return f"{m.group(1)}: {m.group(2).replace(',', ', ').replace('_', ' ')}"
+    if m := re.match(r"(0x[0-9a-f]+)<(.+)>", s):
+        return f"{m[1]}: {m[2].replace(',', ', ').replace('_', ' ')}"
     return s
 
 
@@ -73,9 +72,15 @@ def produce_nvdimm_alerts(i, critical_health, nvdimm_health, es_health):
             }
         ))
 
-    for k in ["Module Health", "Error Threshold Status", "Warning Threshold Status"]:
-        if nvdimm_health[k] != "0x0":
-            alerts.append(Alert(NVDIMMAlertClass, {"i": i, "k": k, "value": nvdimm_health[k]}))
+    alerts.extend(
+        Alert(NVDIMMAlertClass, {"i": i, "k": k, "value": nvdimm_health[k]})
+        for k in [
+            "Module Health",
+            "Error Threshold Status",
+            "Warning Threshold Status",
+        ]
+        if nvdimm_health[k] != "0x0"
+    )
 
     nvm_lifetime = int(nvdimm_health["NVM Lifetime"].rstrip("%"))
     if nvm_lifetime < 20:

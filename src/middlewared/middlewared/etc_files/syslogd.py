@@ -64,11 +64,15 @@ def generate_syslog_remote_destination(middleware, advanced_config):
                 result += f"key-file(\"{certificate[0]['privatekey_path']}\") " \
                           f"cert-file(\"{certificate[0]['certificate_path']}\")"
             else:
-                msg = 'Skipping setting key-file/cert-file for remote syslog as '
-                if not certificate:
-                    msg += 'no certificate configured'
-                else:
-                    msg += 'specified certificate has been revoked'
+                msg = (
+                    'Skipping setting key-file/cert-file for remote syslog as '
+                    + (
+                        'specified certificate has been revoked'
+                        if certificate
+                        else 'no certificate configured'
+                    )
+                )
+
                 logger.debug(msg)
 
             result += "));"
@@ -220,18 +224,18 @@ def generate_ha_syslog(middleware):
 def use_syslog_dataset(middleware):
     systemdataset = middleware.call_sync("systemdataset.config")
 
-    if systemdataset["syslog"]:
-        try:
-            return middleware.call_sync("cache.get", "use_syslog_dataset")
-        except KeyError:
-            pass
-
-        if not middleware.call_sync("system.is_enterprise"):
-            return True
-        else:
-            return middleware.call_sync("failover.status") != "BACKUP"
-    else:
+    if not systemdataset["syslog"]:
         return False
+    try:
+        return middleware.call_sync("cache.get", "use_syslog_dataset")
+    except KeyError:
+        pass
+
+    return (
+        middleware.call_sync("failover.status") != "BACKUP"
+        if middleware.call_sync("system.is_enterprise")
+        else True
+    )
 
 
 def configure_syslog(middleware):
@@ -266,23 +270,24 @@ def configure_syslog(middleware):
                     # Pick up any new directories and sync them
                     if not os.path.isdir(dst):
                         shutil.copytree(item, dst)
+                elif os.path.isfile(dst):
+                    with open(item, "rb") as f1:
+                        with open(dst, "ab") as f2:
+                            shutil.copyfileobj(f1, f2)
                 else:
-                    # If the file exists already, append to
-                    # it, otherwise, copy it over.
-                    if os.path.isfile(dst):
-                        with open(item, "rb") as f1:
-                            with open(dst, "ab") as f2:
-                                shutil.copyfileobj(f1, f2)
-                    else:
-                        shutil.copy(item, dst)
+                    shutil.copy(item, dst)
     else:
         # This is the first time syslog is going to log to this
         # directory, so create the log directory and sync files.
         os.mkdir(log_path)
         os.chmod(log_path, 0o755)
         os.chown(log_path, 0, 0)
-        subprocess.run(f"rsync -avz /var/log/* {shlex.quote(log_path + '/')}", shell=True,
-                       stdout=subprocess.DEVNULL)
+        subprocess.run(
+            f"rsync -avz /var/log/* {shlex.quote(f'{log_path}/')}",
+            shell=True,
+            stdout=subprocess.DEVNULL,
+        )
+
 
     symlink = False
     if os.path.islink("/var/log"):

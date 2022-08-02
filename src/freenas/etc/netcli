@@ -156,9 +156,11 @@ class NICChoices(object):
                 except sqlite3.OperationalError:
                     pass
                 else:
-                    for interface in c:
-                        if interface[0] not in self._NIClist:
-                            self._NIClist.append(interface[0])
+                    self._NIClist.extend(
+                        interface[0]
+                        for interface in c
+                        if interface[0] not in self._NIClist
+                    )
 
         if self.with_alias:
             try:
@@ -219,8 +221,8 @@ class NICChoices(object):
 
 class DjangoModelMeta(type):
     @property
-    def objects(cls):
-        return DjangoModelManager(cls)
+    def objects(self):
+        return DjangoModelManager(self)
 
 
 class DjangoModel(metaclass=DjangoModelMeta):
@@ -315,9 +317,7 @@ class Interfaces(DjangoModel):
     datastore = "network.interfaces"
 
     def __str__(self):
-        if not self.int_name:
-            return self.int_interface
-        return str(self.int_name)
+        return str(self.int_name) if self.int_name else self.int_interface
 
 
 class LAGGInterface(DjangoModel):
@@ -367,19 +367,15 @@ def quad_to_cidr(quad):
     count = 0
     octets = quad.split('.')
     for octet in octets:
-        i = 7
         o = int(octet)
-        if vals.get(o):
-            while i >= 0:
-                if o & (1 << i):
-                    count += 1
-                else:
-                    return count
-                i -= 1
-
-        else:
+        if not vals.get(o):
             return False
 
+        for i in range(7, -1, -1):
+            if o & (1 << i):
+                count += 1
+            else:
+                return count
     return count
 
 
@@ -399,10 +395,7 @@ def hex_to_cidr(_hex):
 
 def prompt(prompt_str, default_value=None):
     """Returns a string that forms a prompt, based on values passed in"""
-    if default_value:
-        default_str = ' [%s]' % (str(default_value), )
-    else:
-        default_str = ''
+    default_str = f' [{str(default_value)}]' if default_value else ''
     return (prompt_str + default_str + ':')
 
 

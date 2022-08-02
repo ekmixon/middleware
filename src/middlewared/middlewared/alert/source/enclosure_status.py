@@ -39,12 +39,12 @@ class EnclosureStatusAlertSource(AlertSource):
 
         for num, enc in enumerate(await self.middleware.call('enclosure.query')):
             healthy = True
-            for ele in sum([e['elements'] for e in enc['elements']], []):
+            for ele in sum((e['elements'] for e in enc['elements']), []):
                 if ele['status'] in ['Critical', 'Noncritical', 'Unrecoverable']:
                     pass
-                elif ele['status'] == 'Not Installed' and ele['name'] in ['Power Supply']:
-                    pass
-                else:
+                elif ele['status'] != 'Not Installed' or ele['name'] not in [
+                    'Power Supply'
+                ]:
                     continue
 
                 # Enclosure element is CRITICAL in single head, ignore this for now
@@ -57,9 +57,11 @@ class EnclosureStatusAlertSource(AlertSource):
                 # scoping this confirms the voltage is fine.
                 # Ignore alerts from this element.
                 # #10077
-                if enc['name'] == 'ECStream 3U16+4R-4X6G.3 d10c':
-                    if ele['descriptor'] == '1.8V Sensor':
-                        continue
+                if (
+                    enc['name'] == 'ECStream 3U16+4R-4X6G.3 d10c'
+                    and ele['descriptor'] == '1.8V Sensor'
+                ):
+                    continue
 
                 healthy = False
                 alerts.append(Alert(

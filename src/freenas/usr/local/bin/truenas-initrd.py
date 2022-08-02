@@ -40,12 +40,7 @@ def update_zfs_default(root):
             mapping[dev.sys_name] = parent.get("ID_BUS")
             mapping[os.path.join("disk/by-partuuid", dev.get("ID_PART_ENTRY_UUID"))] = parent.get("ID_BUS")
 
-    has_usb = False
-    for dev in disks:
-        if mapping.get(dev) == "usb":
-            has_usb = True
-            break
-
+    has_usb = any(mapping.get(dev) == "usb" for dev in disks)
     zfs_config_path = os.path.join(root, "etc/default/zfs")
     with open(zfs_config_path) as f:
         original_config = f.read()

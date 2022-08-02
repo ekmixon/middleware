@@ -99,7 +99,7 @@ def main(command, quiet):
                     ret = client.call('failover.call_remote', 'failover.control', ['DISABLE', {'active': True}])
                 except Exception:
                     ret = False
-            if ret is not False:
+            if ret:
                 client.call('failover.control', 'DISABLE', {'active': status == 'master'})
                 print("Failover disabled.")
                 sys.exit(0)

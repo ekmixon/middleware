@@ -212,7 +212,7 @@ def init():
                 # means unable to determine OS version betwen all peers
                 print(error)
             sys.exit(2)
-        elif len(set([i[1] for i in versions])) > 1:
+        elif len({i[1] for i in versions}) > 1:
             # means OS versions do not match between all peers
             print(f'Version of software installed on each peer is not the same: {versions}')
             sys.exit(2)

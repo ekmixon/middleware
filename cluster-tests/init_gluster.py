@@ -12,45 +12,37 @@ def enable_and_start_service_on_all_nodes():
     """enable and start glusterd service on all nodes in cluster"""
     with ThreadPoolExecutor() as exc:
         # enable the services
-        urls = [url + '/service/id/glusterd' for url in URLS]
+        urls = [f'{url}/service/id/glusterd' for url in URLS]
         payload = {'enable': True}
         futures = {exc.submit(make_request, 'put', url, data=payload): url for url in urls}
 
-        results = {}
-        for fut in as_completed(futures):
-            results[futures[fut]] = fut.result()
-
+        results = {futures[fut]: fut.result() for fut in as_completed(futures)}
         assert all(v.status_code == 200 for k, v in results.items()), results
 
         # verify services are enabled
-        urls = [url + '/service?service=glusterd' for url in URLS]
+        urls = [f'{url}/service?service=glusterd' for url in URLS]
         futures = {exc.submit(make_request, 'get', url): url for url in urls}
 
-        results = {}
-        for fut in as_completed(futures):
-            results[futures[fut]] = fut.result().json()[0]['enable']
+        results = {
+            futures[fut]: fut.result().json()[0]['enable']
+            for fut in as_completed(futures)
+        }
 
         assert all(v is True for k, v in results.items()), results
 
         # start the services
-        urls = [url + '/service/start' for url in URLS]
+        urls = [f'{url}/service/start' for url in URLS]
         payload = {'service': 'glusterd'}
         futures = {exc.submit(make_request, 'post', url, data=payload): url for url in urls}
 
-        results = {}
-        for fut in as_completed(futures):
-            results[futures[fut]] = fut.result()
-
+        results = {futures[fut]: fut.result() for fut in as_completed(futures)}
         assert all(v.status_code == 200 and v.json() is True for k, v in results.items()), results
 
         # verify the services are started
-        urls = [url + '/service/?service=glusterd' for url in URLS]
+        urls = [f'{url}/service/?service=glusterd' for url in URLS]
         futures = {exc.submit(make_request, 'get', url): url for url in urls}
 
-        results = {}
-        for fut in as_completed(futures):
-            results[futures[fut]] = fut.result()
-
+        results = {futures[fut]: fut.result() for fut in as_completed(futures)}
         assert all(v.status_code == 200 and v.json()[0]['state'] == 'RUNNING' for k, v in results.items()), results
 
 
@@ -80,31 +72,27 @@ def add_peers():
     # use casefold() for purpose of hostname validation sense case does not matter
     # but the resolvable names on the network might not match _exactly_ with what
     # was given to us in the config (i.e. DNS1.HOSTNAME.BLAH == DNS1.hostname.BLAH)
-    assert set([i['hostname'].casefold() for i in ans.json()]) == set([i.casefold() for i in GPD]), ans.json()
+    assert {i['hostname'].casefold() for i in ans.json()} == {
+        i.casefold() for i in GPD
+    }, ans.json()
 
 
 def add_jwt_secret():
     """add the jwt secret to all nodes in the cluster"""
     with ThreadPoolExecutor() as exc:
         # add the secret to all nodes
-        urls = [url + '/gluster/localevents/add_jwt_secret' for url in URLS]
+        urls = [f'{url}/gluster/localevents/add_jwt_secret' for url in URLS]
         payload = {'secret': CLUSTER_INFO['APIPASS'], 'force': True}
         futures = {exc.submit(make_request, 'post', url, data=payload): url for url in urls}
 
-        results = {}
-        for fut in as_completed(futures):
-            results[futures[fut]] = fut.result()
-
+        results = {futures[fut]: fut.result() for fut in as_completed(futures)}
         assert all(v.status_code == 200 for k, v in results.items()), results
 
         # verify the secret on all nodes
-        urls = [url + '/gluster/localevents/get_set_jwt_secret' for url in URLS]
+        urls = [f'{url}/gluster/localevents/get_set_jwt_secret' for url in URLS]
         futures = {exc.submit(make_request, 'get', url): url for url in urls}
 
-        results = {}
-        for fut in as_completed(futures):
-            results[futures[fut]] = fut.result()
-
+        results = {futures[fut]: fut.result() for fut in as_completed(futures)}
         assert all(v.status_code == 200 and v.json() == CLUSTER_INFO['APIPASS'] for k, v in results.items()), results
 
 

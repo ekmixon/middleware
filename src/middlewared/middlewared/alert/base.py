@@ -265,10 +265,7 @@ class AlertService:
 
         html = format_alerts(product_name, hostname, node_map, alerts, gone_alerts, new_alerts)
 
-        if self.html:
-            return html
-
-        return html2text.html2text(html).rstrip()
+        return html if self.html else html2text.html2text(html).rstrip()
 
 
 class ThreadedAlertService(AlertService):
@@ -320,13 +317,10 @@ def format_alerts(product_name, hostname, node_map, alerts, gone_alerts, new_ale
     text = f"{product_name} @ {hostname}<br><br>"
 
     if len(alerts) == 1 and len(gone_alerts) == 0 and len(new_alerts) == 1 and new_alerts[0].klass.name == "Test":
-        return text + "This is a test alert"
+        return f"{text}This is a test alert"
 
     if new_alerts:
-        if len(gone_alerts) == 1:
-            text += "New alert"
-        else:
-            text += "New alerts"
+        text += "New alert" if len(gone_alerts) == 1 else "New alerts"
         text += ":\n<ul>" + "".join([
             "<li>%s</li>\n" % format_alert(alert, node_map)
             for alert in new_alerts
@@ -356,7 +350,4 @@ def format_alert(alert, node_map):
 
 
 def ellipsis(s, l):
-    if len(s) <= l:
-        return s
-
-    return s[:(l - 1)] + "…"
+    return s if len(s) <= l else f"{s[:(l - 1)]}…"

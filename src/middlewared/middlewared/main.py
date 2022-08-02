@@ -113,8 +113,7 @@ class Application(object):
             tb_frame = cur_tb.tb_frame
             cur_tb = cur_tb.tb_next
 
-            cur_frame = get_frame_details(tb_frame, self.logger)
-            if cur_frame:
+            if cur_frame := get_frame_details(tb_frame, self.logger):
                 frames.append(cur_frame)
 
         return {
@@ -178,8 +177,7 @@ class Application(object):
             # send errors to the client
             self.send_error(message, e.errno, str(e), sys.exc_info(), extra=e.extra)
         except Exception as e:
-            adapted = adapt_exception(e)
-            if adapted:
+            if adapted := adapt_exception(e):
                 self.send_error(message, adapted.errno, str(adapted), sys.exc_info(), extra=adapted.extra)
             else:
                 self.send_error(message, errno.EINVAL, str(e), sys.exc_info())
@@ -227,10 +225,9 @@ class Application(object):
 
     def send_event(self, name, event_type, **kwargs):
         if (
-            not any(i == name or i == '*' for i in self.__subscribed.values()) and
-            self.middleware.event_source_manager.short_name_arg(
-                name
-            )[0] not in self.middleware.event_source_manager.event_sources
+            all(i not in [name, '*'] for i in self.__subscribed.values())
+            and self.middleware.event_source_manager.short_name_arg(name)[0]
+            not in self.middleware.event_source_manager.event_sources
         ):
             return
         event = {
@@ -240,12 +237,10 @@ class Application(object):
         kwargs = kwargs.copy()
         if 'id' in kwargs:
             event['id'] = kwargs.pop('id')
-        if event_type in ('ADDED', 'CHANGED'):
-            if 'fields' in kwargs:
-                event['fields'] = kwargs.pop('fields')
-        if event_type == 'CHANGED':
-            if 'cleared' in kwargs:
-                event['cleared'] = kwargs.pop('cleared')
+        if event_type in ('ADDED', 'CHANGED') and 'fields' in kwargs:
+            event['fields'] = kwargs.pop('fields')
+        if event_type == 'CHANGED' and 'cleared' in kwargs:
+            event['cleared'] = kwargs.pop('cleared')
         if kwargs:
             event['extra'] = kwargs
         self._send(event)
@@ -379,8 +374,7 @@ class FileApplication(object):
         )
 
     async def _cleanup_cancel(self, job_id):
-        job_cleanup = self.jobs.pop(job_id, None)
-        if job_cleanup:
+        if job_cleanup := self.jobs.pop(job_id, None):
             job_cleanup.cancel()
 
     async def _cleanup_job(self, job_id):
@@ -461,14 +455,12 @@ class FileApplication(object):
         auth = request.headers.get('Authorization')
         if auth:
             if auth.startswith('Basic '):
-                try:
+                with contextlib.suppress(binascii.Error):
                     auth = binascii.a2b_base64(auth[6:]).decode()
                     if ':' in auth:
                         user, password = auth.split(':', 1)
                         if await self.middleware.call('auth.check_user', user, password):
                             denied = False
-                except binascii.Error:
-                    pass
             elif auth.startswith('Token '):
                 auth_token = auth.split(" ", 1)[1]
                 token = await self.middleware.call('auth.get_token', auth_token)
@@ -514,11 +506,10 @@ class FileApplication(object):
         if 'method' not in data:
             return web.Response(status=422)
 
-        if api_key is not None:
-            if not api_key.authorize('CALL', data['method']):
-                resp = web.Response()
-                resp.set_status(403)
-                return resp
+        if api_key is not None and not api_key.authorize('CALL', data['method']):
+            resp = web.Response()
+            resp.set_status(403)
+            return resp
 
         filepart = await reader.next()
 
@@ -528,7 +519,7 @@ class FileApplication(object):
             return resp
 
         def copy():
-            try:
+            with contextlib.suppress(BrokenPipeError):
                 try:
                     while True:
                         read = asyncio.run_coroutine_threadsafe(
@@ -540,18 +531,13 @@ class FileApplication(object):
                         job.pipes.input.w.write(read)
                 finally:
                     job.pipes.input.w.close()
-            except BrokenPipeError:
-                pass
 
         try:
             job = await self.middleware.call(data['method'], *(data.get('params') or []),
                                              pipes=Pipes(input=self.middleware.pipe()))
             await self.middleware.run_in_thread(copy)
         except CallError as e:
-            if e.errno == CallError.ENOMETHOD:
-                status_code = 422
-            else:
-                status_code = 412
+            status_code = 422 if e.errno == CallError.ENOMETHOD else 412
             return web.Response(status=status_code, body=str(e))
         except Exception as e:
             return web.Response(status=500, body=str(e))
@@ -806,7 +792,7 @@ class ShellApplication(object):
         # If connection has been closed lets make sure shell is killed
         if t_worker.shell_pid:
 
-            try:
+            with contextlib.suppress(ProcessLookupError):
                 pid_waiter = osc.PidWaiter(self.middleware, t_worker.shell_pid)
 
                 os.kill(t_worker.shell_pid, signal.SIGTERM)
@@ -820,9 +806,6 @@ class ShellApplication(object):
                     # release the worker thread
                     if not await pid_waiter.wait(2):
                         t_worker.die()
-            except ProcessLookupError:
-                pass
-
         # Wait thread join in yet another thread to avoid event loop blockage
         # There may be a simpler/better way to do this?
         await self.middleware.run_in_thread(t_worker.join)
@@ -974,11 +957,7 @@ class Middleware(LoadPluginsMixin, RunInThreadMixin, ServiceCallMixin):
             for task_name in dir(service_obj):
                 method = getattr(service_obj, task_name)
                 if callable(method) and hasattr(method, "_periodic"):
-                    if method._periodic.run_on_start:
-                        delay = 0
-                    else:
-                        delay = method._periodic.interval
-
+                    delay = 0 if method._periodic.run_on_start else method._periodic.interval
                     method_name = f'{service_name}.{task_name}'
                     self.logger.debug(
                         f"Setting up periodic task {method_name} to run every {method._periodic.interval} seconds"
@@ -1030,13 +1009,11 @@ class Middleware(LoadPluginsMixin, RunInThreadMixin, ServiceCallMixin):
                 self.__console_io = open('/dev/console', 'w')
             except Exception:
                 return
-            try:
+            with contextlib.suppress(Exception):
                 # We need to make sure we only try to write to console one time
                 # in case middlewared crashes and keep writing to console in a loop.
                 with open(self.CONSOLE_ONCE_PATH, 'w'):
                     pass
-            except Exception:
-                pass
         try:
             if append:
                 self.__console_io.write(text)
@@ -1050,10 +1027,7 @@ class Middleware(LoadPluginsMixin, RunInThreadMixin, ServiceCallMixin):
                     text = text[:-1]
                 else:
                     newline = ''
-                if fill_blank:
-                    blank = ' ' * (maxlen - (len(prefix) + len(text)))
-                else:
-                    blank = ''
+                blank = ' ' * (maxlen - (len(prefix) + len(text))) if fill_blank else ''
                 writes = self.__console_io.write(
                     f'\r{prefix}{text}{blank}{newline}'
                 )
@@ -1069,10 +1043,10 @@ class Middleware(LoadPluginsMixin, RunInThreadMixin, ServiceCallMixin):
             if self.startup_seq_path is None:
                 return
 
-            with open(self.startup_seq_path + ".tmp", "w") as f:
+            with open(f"{self.startup_seq_path}.tmp", "w") as f:
                 f.write(f"{self.startup_seq}")
 
-            os.rename(self.startup_seq_path + ".tmp", self.startup_seq_path)
+            os.rename(f"{self.startup_seq_path}.tmp", self.startup_seq_path)
 
             self.startup_seq += 1
 
@@ -1130,7 +1104,8 @@ class Middleware(LoadPluginsMixin, RunInThreadMixin, ServiceCallMixin):
                 yield hook, hook['method'](self, *args, **kwargs)
             except Exception:
                 self.logger.error(
-                    'Failed to run hook {}:{}(*{}, **{})'.format(name, hook['method'], args, kwargs), exc_info=True
+                    f"Failed to run hook {name}:{hook['method']}(*{args}, **{kwargs})",
+                    exc_info=True,
                 )
 
     async def call_hook(self, name, *args, **kwargs):
@@ -1149,7 +1124,8 @@ class Middleware(LoadPluginsMixin, RunInThreadMixin, ServiceCallMixin):
                     asyncio.ensure_future(fut)
             except Exception:
                 self.logger.error(
-                    'Failed to run hook {}:{}(*{}, **{})'.format(name, hook['method'], args, kwargs), exc_info=True
+                    f"Failed to run hook {name}:{hook['method']}(*{args}, **{kwargs})",
+                    exc_info=True,
                 )
 
     def call_hook_sync(self, name, *args, **kwargs):
@@ -1225,10 +1201,7 @@ class Middleware(LoadPluginsMixin, RunInThreadMixin, ServiceCallMixin):
         if params:
             args.extend(params)
 
-        # If the method is marked as a @job we need to create a new
-        # entry to keep track of its state.
-        job_options = getattr(methodobj, '_job', None)
-        if job_options:
+        if job_options := getattr(methodobj, '_job', None):
             if serviceobj._config.process_pool:
                 job_options['process'] = True
             # Create a job instance with required args
@@ -1281,12 +1254,11 @@ class Middleware(LoadPluginsMixin, RunInThreadMixin, ServiceCallMixin):
         return await self.run_in_proc(main_worker, name, args, job)
 
     def dump_args(self, args, method=None, method_name=None):
-        if method is None:
-            if method_name is not None:
-                try:
-                    method = self._method_lookup(method_name)[1]
-                except Exception:
-                    return args
+        if method is None and method_name is not None:
+            try:
+                method = self._method_lookup(method_name)[1]
+            except Exception:
+                return args
 
         if (not hasattr(method, 'accepts') and
                 method.__name__ in ['create', 'update', 'delete'] and
@@ -1295,11 +1267,14 @@ class Middleware(LoadPluginsMixin, RunInThreadMixin, ServiceCallMixin):
             if child_method is not None:
                 method = child_method
 
-        if not hasattr(method, 'accepts'):
-            return args
-
-        return [method.accepts[i].dump(arg) if i < len(method.accepts) else arg
-                for i, arg in enumerate(args)]
+        return (
+            [
+                method.accepts[i].dump(arg) if i < len(method.accepts) else arg
+                for i, arg in enumerate(args)
+            ]
+            if hasattr(method, 'accepts')
+            else args
+        )
 
     async def call(self, name, *params, pipes=None, job_on_progress_cb=None, app=None, profile=False):
         serviceobj, methodobj = self._method_lookup(name)
@@ -1726,15 +1701,14 @@ def main():
     pidpath = '/var/run/middlewared.pid'
     startup_seq_path = '/tmp/middlewared_startup.seq'
 
-    if args.restart:
-        if os.path.exists(pidpath):
-            with open(pidpath, 'r') as f:
-                pid = int(f.read().strip())
-            try:
-                os.kill(pid, 15)
-            except ProcessLookupError as e:
-                if e.errno != errno.ESRCH:
-                    raise
+    if args.restart and os.path.exists(pidpath):
+        with open(pidpath, 'r') as f:
+            pid = int(f.read().strip())
+        try:
+            os.kill(pid, 15)
+        except ProcessLookupError as e:
+            if e.errno != errno.ESRCH:
+                raise
 
     logger.setup_logging('middleware', args.debug_level, args.log_handler)
 

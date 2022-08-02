@@ -132,10 +132,7 @@ class throttle(object):
                 if not should_throttle:
                     return await fn(*args, **kwargs)
 
-                while True:
-                    if self._register_call(key):
-                        break
-
+                while True and not self._register_call(key):
                     await asyncio.sleep(0.5)
 
                 return await fn(*args, **kwargs)
@@ -327,12 +324,7 @@ def service_config(klass, config):
         'cli_private': False,
         'cli_description': None,
         'verbose_name': klass.__name__.replace('Service', ''),
-    }
-    config_attrs.update({
-        k: v
-        for k, v in list(config.items())
-        if not k.startswith('_')
-    })
+    } | {k: v for k, v in list(config.items()) if not k.startswith('_')}
 
     return type('Config', (), config_attrs)
 
@@ -383,7 +375,7 @@ class CompoundService(Service):
                 if part1._config_specified[key] != part2._config_specified[key]:
                     raise RuntimeError(f'{part1} has {key}={part1._config_specified[key]!r}, but '
                                        f'{part2} has {key}={part2._config_specified[key]!r}')
-            config_specified.update(part1._config_specified)
+            config_specified |= part1._config_specified
             config_specified.update(part2._config_specified)
 
         self._config = service_config(parts[0].__class__, config_specified)
@@ -478,10 +470,12 @@ class ConfigService(ServiceChangeMixin, Service, metaclass=ConfigServiceMetabase
 
     @accepts()
     async def config(self):
-        options = {}
-        options['extend'] = self._config.datastore_extend
-        options['extend_context'] = self._config.datastore_extend_context
-        options['prefix'] = self._config.datastore_prefix
+        options = {
+            'extend': self._config.datastore_extend,
+            'extend_context': self._config.datastore_extend_context,
+            'prefix': self._config.datastore_prefix,
+        }
+
         return await self._get_or_insert(self._config.datastore, options)
 
     async def update(self, data):
@@ -594,10 +588,11 @@ class TDBWrapConfigService(ConfigService):
             )
             data = copy.deepcopy(self.tdb_defaults)
 
-        if not self._config.datastore_extend:
-            return data
-
-        return await self.middleware.call(self._config.datastore_extend, data)
+        return (
+            await self.middleware.call(self._config.datastore_extend, data)
+            if self._config.datastore_extend
+            else data
+        )
 
     @private
     async def direct_update(self, data):
@@ -645,10 +640,13 @@ class TDBWrapConfigService(ConfigService):
             "tdb-options": self.tdb_options.copy(),
         })
 
-        if not self._config.datastore_extend:
-            return tdb_config["data"]
-
-        return await self.middleware.call(self._config.datastore_extend, tdb_config["data"])
+        return (
+            await self.middleware.call(
+                self._config.datastore_extend, tdb_config["data"]
+            )
+            if self._config.datastore_extend
+            else tdb_config["data"]
+        )
 
     async def do_update(self, data):
         res = await self.direct_update(data)
@@ -705,14 +703,12 @@ class CRUDServiceMetabase(ServiceBase):
         entry_key = f'{namespace}_entry'
         if klass.ENTRY == NotImplementedError:
             klass.ENTRY = Dict(entry_key, additional_attrs=True)
+        elif isinstance(klass.ENTRY, (Dict, Patch)):
+            entry_key = klass.ENTRY.name
+        elif isinstance(klass.ENTRY, Ref):
+            entry_key = f'{klass.ENTRY.name}_ref_entry'
         else:
-            # We would like to ensure that not all fields are required as select can filter out fields
-            if isinstance(klass.ENTRY, (Dict, Patch)):
-                entry_key = klass.ENTRY.name
-            elif isinstance(klass.ENTRY, Ref):
-                entry_key = f'{klass.ENTRY.name}_ref_entry'
-            else:
-                raise ValueError('Result entry should be Dict/Patch/Ref instance')
+            raise ValueError('Result entry should be Dict/Patch/Ref instance')
 
         result_entry = copy.deepcopy(klass.ENTRY)
         query_result_entry = copy.deepcopy(klass.ENTRY)
@@ -811,23 +807,19 @@ class CRUDService(ServiceChangeMixin, Service, metaclass=CRUDServiceMetabase):
 
         options = await self.get_options(options)
 
-        # In case we are extending which may transform the result in numerous ways
-        # we can only filter the final result. Exception is when forced to use sql
-        # for filters for performance reasons.
-        if not options['force_sql_filters'] and options['extend']:
-            datastore_options = options.copy()
-            datastore_options.pop('count', None)
-            datastore_options.pop('get', None)
-            result = await self.middleware.call(
-                'datastore.query', self._config.datastore, [], datastore_options
-            )
-            return await self.middleware.run_in_thread(
-                filter_list, result, filters, options
-            )
-        else:
+        if options['force_sql_filters'] or not options['extend']:
             return await self.middleware.call(
                 'datastore.query', self._config.datastore, filters, options,
             )
+        datastore_options = options.copy()
+        datastore_options.pop('count', None)
+        datastore_options.pop('get', None)
+        result = await self.middleware.call(
+            'datastore.query', self._config.datastore, [], datastore_options
+        )
+        return await self.middleware.run_in_thread(
+            filter_list, result, filters, options
+        )
 
     @pass_app(rest=True)
     async def create(self, app, data):
@@ -835,9 +827,8 @@ class CRUDService(ServiceChangeMixin, Service, metaclass=CRUDServiceMetabase):
             f'{self._config.namespace}.create', self, self.do_create, [data], app=app,
         )
         await self.middleware.call_hook(f'{self._config.namespace}.post_create', rv)
-        if self._config.event_send:
-            if isinstance(rv, dict) and 'id' in rv:
-                self.middleware.send_event(f'{self._config.namespace}.query', 'ADDED', id=rv['id'], fields=rv)
+        if self._config.event_send and isinstance(rv, dict) and 'id' in rv:
+            self.middleware.send_event(f'{self._config.namespace}.query', 'ADDED', id=rv['id'], fields=rv)
         return rv
 
     @pass_app(rest=True)
@@ -846,9 +837,8 @@ class CRUDService(ServiceChangeMixin, Service, metaclass=CRUDServiceMetabase):
             f'{self._config.namespace}.update', self, self.do_update, [id, data], app=app,
         )
         await self.middleware.call_hook(f'{self._config.namespace}.post_update', rv)
-        if self._config.event_send:
-            if isinstance(rv, dict) and 'id' in rv:
-                self.middleware.send_event(f'{self._config.namespace}.query', 'CHANGED', id=rv['id'], fields=rv)
+        if self._config.event_send and isinstance(rv, dict) and 'id' in rv:
+            self.middleware.send_event(f'{self._config.namespace}.query', 'CHANGED', id=rv['id'], fields=rv)
         return rv
 
     @pass_app(rest=True)
@@ -948,8 +938,9 @@ class CRUDService(ServiceChangeMixin, Service, metaclass=CRUDServiceMetabase):
                 }
                 if service is not None:
                     query_col = fk
-                    prefix = services[datastore][1]['config'].get('datastore_prefix')
-                    if prefix:
+                    if prefix := services[datastore][1]['config'].get(
+                        'datastore_prefix'
+                    ):
                         if query_col.startswith(prefix):
                             query_col = query_col[len(prefix):]
 
@@ -983,10 +974,16 @@ class SharingTaskService(CRUDService):
 
     @private
     async def sharing_task_extend_context(self, rows, extra):
-        datasets = sum([
-            await self.middleware.call(f'{self._config.namespace}.sharing_task_datasets', row)
-            for row in rows
-        ], [])
+        datasets = sum(
+            (
+                await self.middleware.call(
+                    f'{self._config.namespace}.sharing_task_datasets', row
+                )
+                for row in rows
+            ),
+            [],
+        )
+
 
         return {
             'locked_datasets': await self.middleware.call('zfs.dataset.locked_datasets', datasets) if datasets else [],
@@ -1404,8 +1401,7 @@ class CoreService(Service):
             frame = None
             frames = []
             for frame in task.get_stack():
-                cur_frame = get_frame_details(frame, self.logger)
-                if cur_frame:
+                if cur_frame := get_frame_details(frame, self.logger):
                     frames.append(cur_frame)
 
             if frame:
@@ -1418,10 +1414,11 @@ class CoreService(Service):
     @filterable
     def get_jobs(self, filters, options):
         """Get the long running jobs."""
-        jobs = filter_list([
-            i.__encode__() for i in list(self.middleware.jobs.all().values())
-        ], filters, options)
-        return jobs
+        return filter_list(
+            [i.__encode__() for i in list(self.middleware.jobs.all().values())],
+            filters,
+            options,
+        )
 
     @accepts()
     @returns(List('websocket_messages', items=[Dict(
@@ -1462,8 +1459,7 @@ class CoreService(Service):
     ))
     def job_update(self, id, data):
         job = self.middleware.jobs.all()[id]
-        progress = data.get('progress')
-        if progress:
+        if progress := data.get('progress'):
             job.set_progress(
                 progress['percent'],
                 description=progress.get('description'),
@@ -1518,9 +1514,8 @@ class CoreService(Service):
 
             config = {k: v for k, v in list(v._config.__dict__.items())
                       if not k.startswith(('_', 'process_pool', 'thread_pool'))}
-            if config['cli_description'] is None:
-                if v.__doc__:
-                    config['cli_description'] = inspect.getdoc(v).split("\n")[0].strip()
+            if config['cli_description'] is None and v.__doc__:
+                config['cli_description'] = inspect.getdoc(v).split("\n")[0].strip()
 
             services[k] = {
                 'config': config,
@@ -1563,7 +1558,7 @@ class CoreService(Service):
                     so thats where we actually extract pertinent information.
                     """
                     if attr in ('create', 'update', 'delete'):
-                        method = getattr(svc, 'do_{}'.format(attr), None)
+                        method = getattr(svc, f'do_{attr}', None)
                         if method is None:
                             continue
                         if attr in ('update', 'delete'):
@@ -1577,7 +1572,7 @@ class CoreService(Service):
                     so thats where we actually extract pertinent information.
                     """
                     if attr == 'update':
-                        original_name = 'do_{}'.format(attr)
+                        original_name = f'do_{attr}'
                         if hasattr(svc, original_name):
                             method = getattr(svc, original_name, None)
                         else:
@@ -1644,12 +1639,14 @@ class CoreService(Service):
                     filterable_schema = self.get_json_schema([filterable_schema], None)[0]
                 elif attr == 'query':
                     if isinstance(svc, CompoundService):
-                        for part in svc.parts:
-                            if hasattr(part, 'do_create'):
-                                d = inspect.getdoc(part.do_create)
-                                break
-                        else:
-                            d = None
+                        d = next(
+                            (
+                                inspect.getdoc(part.do_create)
+                                for part in svc.parts
+                                if hasattr(part, 'do_create')
+                            ),
+                            None,
+                        )
 
                         for part in svc.parts:
                             if hasattr(part, 'ENTRY'):
@@ -1728,19 +1725,20 @@ class CoreService(Service):
         """
         Returns metadata for every possible event emitted from websocket server.
         """
-        events = {}
-        for name, attrs in self.middleware.get_events():
-            if attrs['private']:
-                continue
-
-            events[name] = {
+        return {
+            name: {
                 'description': attrs['description'],
                 'wildcard_subscription': attrs['wildcard_subscription'],
-                'accepts': self.get_json_schema(list(filter(bool, attrs['accepts'])), attrs['description']),
-                'returns': self.get_json_schema(list(filter(bool, attrs['returns'])), attrs['description']),
+                'accepts': self.get_json_schema(
+                    list(filter(bool, attrs['accepts'])), attrs['description']
+                ),
+                'returns': self.get_json_schema(
+                    list(filter(bool, attrs['returns'])), attrs['description']
+                ),
             }
-
-        return events
+            for name, attrs in self.middleware.get_events()
+            if not attrs['private']
+        }
 
     @private
     async def call_hook(self, name, args, kwargs=None):
@@ -1815,12 +1813,12 @@ class CoreService(Service):
         verrors.check()
 
         addr = ipaddress.ip_address(ip)
-        if not addr.version == 4 and (options['type'] == 'ICMP' or options['type'] == 'ICMPV4'):
+        if addr.version != 4 and options['type'] in ['ICMP', 'ICMPV4']:
             verrors.add(
                 'options.type',
                 f'Requested ICMPv4 protocol, but the address provided "{addr}" is not a valid IPv4 address.'
             )
-        if not addr.version == 6 and options['type'] == 'ICMPV6':
+        if addr.version != 6 and options['type'] == 'ICMPV6':
             verrors.add(
                 'options.type',
                 f'Requested ICMPv6 protocol, but the address provided "{addr}" is not a valid IPv6 address.'
@@ -1995,7 +1993,7 @@ class CoreService(Service):
         for i, p in enumerate(params):
             progress_description = f"{i} / {len(params)}"
             if description is not None:
-                progress_description += ": " + description.format(*p)
+                progress_description += f": {description.format(*p)}"
 
             job.set_progress(100 * i / len(params), progress_description)
 

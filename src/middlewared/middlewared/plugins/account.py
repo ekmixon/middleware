@@ -228,10 +228,11 @@ class UserService(CRUDService):
         username_sid = {}
         if 'SMB' in additional_information:
             for u in await self.middleware.call("smb.passdb_list", True):
-                username_sid.update({u['Unix username']: {
+                username_sid[u['Unix username']] = {
                     'nt_name': u['NT username'],
                     'sid': u['User SID'],
-                }})
+                }
+
 
         if dssearch:
             return await self.middleware.call('dscache.query', 'USERS', filters, options)
@@ -328,9 +329,7 @@ class UserService(CRUDService):
         verrors.check()
 
         groups = data.pop('groups')
-        create = data.pop('group_create')
-
-        if create:
+        if create := data.pop('group_create'):
             group = await self.middleware.call('group.query', [('group', '=', data['username'])])
             if group:
                 group = group[0]
@@ -588,14 +587,15 @@ class UserService(CRUDService):
             self.logger.warn('Failed to update authorized keys', exc_info=True)
             raise CallError(f'Failed to update authorized keys: {e}')
         else:
-            if user['uid'] == 0:
-                if await self.middleware.call('failover.licensed'):
-                    try:
-                        await self.middleware.call(
-                            'failover.call_remote', 'user.update_sshpubkey', update_sshpubkey_args
-                        )
-                    except Exception:
-                        self.logger.error('Failed to sync root ssh pubkey to standby node', exc_info=True)
+            if user['uid'] == 0 and await self.middleware.call(
+                'failover.licensed'
+            ):
+                try:
+                    await self.middleware.call(
+                        'failover.call_remote', 'user.update_sshpubkey', update_sshpubkey_args
+                    )
+                except Exception:
+                    self.logger.error('Failed to sync root ssh pubkey to standby node', exc_info=True)
 
         if home_copy:
             """
@@ -897,7 +897,7 @@ class UserService(CRUDService):
         if home_old == '/nonexistent':
             return
 
-        command = f"/bin/cp -a {shlex.quote(home_old) + '/' + '.'} {shlex.quote(home_new + '/')}"
+        command = f"/bin/cp -a {shlex.quote(home_old)}/. {shlex.quote(f'{home_new}/')}"
         do_copy = await run(["/usr/bin/su", "-", username, "-c", command], check=False)
         if do_copy.returncode != 0:
             raise CallError(f"Failed to copy homedir [{home_old}] to [{home_new}]: {do_copy.stderr.decode()}")
@@ -1360,11 +1360,8 @@ class GroupService(CRUDService):
                 groupmap_changed = True
         else:
             group.pop('name', None)
-            if new_smb and not old_smb:
+            if new_smb and not old_smb or old_smb and not new_smb:
                 groupmap_changed = True
-            elif old_smb and not new_smb:
-                groupmap_changed = True
-
         group = await self.group_compress(group)
         await self.middleware.call('datastore.update', 'account.bsdgroups', pk, group, {'prefix': 'bsdgrp_'})
 
@@ -1546,8 +1543,7 @@ class GroupService(CRUDService):
                     [('id', 'in', data['users'])],
                 )
             }
-            notfound = set(data['users']) - existing
-            if notfound:
+            if notfound := set(data['users']) - existing:
                 verrors.add(
                     f'{schema}.users',
                     f'Following users do not exist: {", ".join(map(str, notfound))}',
@@ -1558,11 +1554,11 @@ class GroupService(CRUDService):
                 'account.bsdusers',
                 [('bsdusr_group', '=', pk)],
             )
-            notfound = []
-            for user in primary_users:
-                if user['id'] not in data['users']:
-                    notfound.append(user['bsdusr_username'])
-            if notfound:
+            if notfound := [
+                user['bsdusr_username']
+                for user in primary_users
+                if user['id'] not in data['users']
+            ]:
                 verrors.add(
                     f'{schema}.users',
                     f'This group is primary for the following users: {", ".join(map(str, notfound))}. '

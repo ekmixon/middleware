@@ -66,10 +66,7 @@ class EnumMixin(object):
             return value
         if value is None and self.null:
             return value
-        if not isinstance(value, (list, tuple)):
-            tmp = [value]
-        else:
-            tmp = value
+        tmp = value if isinstance(value, (list, tuple)) else [value]
         for v in tmp:
             if v not in self.enum:
                 raise Error(self.name, f'Invalid choice: {value}')
@@ -97,12 +94,21 @@ class Attribute(object):
         self.editable = editable
         self.resolved = False
         if example:
-            self.description = (description or '') + '\n' + textwrap.dedent(f'''
+            self.description = (
+                (description or '')
+                + '\n'
+                + textwrap.dedent(
+                    '''
             Example(s):
             ```
-            ''') + json.dumps(example, indent=4) + textwrap.dedent('''
+            '''
+                )
+                + json.dumps(example, indent=4)
+                + textwrap.dedent('''
             ```
             ''')
+            )
+
         # When a field is marked as non-editable, it must specify a default
         if not self.editable and not self.has_default:
             raise Error(self.name, 'Default value must be specified when attribute is marked as non-editable.')
@@ -123,10 +129,7 @@ class Attribute(object):
         return self.private
 
     def dump(self, value):
-        if self.private:
-            return "********"
-
-        return value
+        return "********" if self.private else value
 
     def validate(self, value):
         verrors = ValidationErrors()
@@ -147,9 +150,7 @@ class Attribute(object):
         raise NotImplementedError("Attribute must implement to_json_schema method")
 
     def _to_json_schema_common(self, parent):
-        schema = {}
-
-        schema['_name_'] = self.name
+        schema = {'_name_': self.name}
 
         if self.title:
             schema['title'] = self.title
@@ -221,18 +222,15 @@ class Str(EnumMixin, Attribute):
             value = str(value)
         if not isinstance(value, str):
             raise Error(self.name, 'Not a string')
-        if not self.empty and not value:
+        if self.empty or value:
+            return value
+        else:
             raise Error(self.name, 'Empty value not allowed')
-        return value
 
     def to_json_schema(self, parent=None):
         schema = self._to_json_schema_common(parent)
 
-        if self.null:
-            schema['type'] = ['string', 'null']
-        else:
-            schema['type'] = 'string'
-
+        schema['type'] = ['string', 'null'] if self.null else 'string'
         if self.enum is not None:
             schema['enum'] = self.enum
 
@@ -266,11 +264,7 @@ class Path(Str):
 
         value = value.strip()
 
-        if self.forwarding_slash:
-            value = value.rstrip("/")
-        else:
-            value = value.strip("/")
-
+        value = value.rstrip("/") if self.forwarding_slash else value.strip("/")
         return os.path.normpath(value.strip())
 
 
@@ -554,9 +548,7 @@ class List(EnumMixin, Attribute):
         return self.private or any(item.has_private() for item in self.items)
 
     def dump(self, value):
-        if self.has_private():
-            return '********'
-        return value
+        return '********' if self.has_private() else value
 
     def validate(self, value):
         if value is None:
@@ -590,10 +582,7 @@ class List(EnumMixin, Attribute):
 
     def to_json_schema(self, parent=None):
         schema = self._to_json_schema_common(parent)
-        if self.null:
-            schema['type'] = ['array', 'null']
-        else:
-            schema['type'] = 'array'
+        schema['type'] = ['array', 'null'] if self.null else 'array'
         schema['items'] = [i.to_json_schema(self) for i in self.items]
         return schema
 
@@ -608,9 +597,7 @@ class List(EnumMixin, Attribute):
 
     def copy(self):
         cp = super().copy()
-        cp.items = []
-        for item in self.items:
-            cp.items.append(item.copy())
+        cp.items = [item.copy() for item in self.items]
         return cp
 
 
@@ -634,10 +621,7 @@ class Dict(Attribute):
             kwargs['default'] = {}
         super(Dict, self).__init__(name, **kwargs)
 
-        self.attrs = {}
-        for i in attrs:
-            self.attrs[i.name] = i
-
+        self.attrs = {i.name: i for i in attrs}
         for k, v in self.conditional_defaults.items():
             if k not in self.attrs:
                 raise ValueError(f'Specified attribute {k!r} not found.')
@@ -654,17 +638,21 @@ class Dict(Attribute):
                     if attr.has_default:
                         raise ValueError(f"Attribute {attr.name} is required and has default value at the same time, "
                                          f"this is forbidden in strict mode")
-                else:
-                    if not attr.has_default:
-                        raise ValueError(f"Attribute {attr.name} is not required and does not have default value, "
-                                         f"this is forbidden in strict mode")
+                elif not attr.has_default:
+                    raise ValueError(f"Attribute {attr.name} is not required and does not have default value, "
+                                     f"this is forbidden in strict mode")
 
     def has_private(self):
         return self.private or any(i.has_private() for i in self.attrs.values())
 
     def get_attrs_to_skip(self, data):
         skip_attrs = defaultdict(set)
-        check_data = self.get_defaults(data, {}, ValidationErrors(), False) if not self.update else data
+        check_data = (
+            data
+            if self.update
+            else self.get_defaults(data, {}, ValidationErrors(), False)
+        )
+
         for attr, attr_data in filter(
             lambda k: not filter_list([check_data], k[1]['filters']), self.conditional_defaults.items()
         ):
@@ -677,26 +665,18 @@ class Dict(Attribute):
         data = super().clean(data)
 
         if data is None:
-            if self.null:
-                return None
-
-            return copy.deepcopy(self.default)
-
+            return None if self.null else copy.deepcopy(self.default)
         if not isinstance(data, dict):
             raise Error(self.name, 'A dict was expected')
 
         verrors = ValidationErrors()
         for key, value in list(data.items()):
-            if not self.additional_attrs:
-                if key not in self.attrs:
-                    verrors.add(f'{self.name}.{key}', 'Field was not expected')
-                    continue
-
-            attr = self.attrs.get(key)
-            if not attr:
+            if not self.additional_attrs and key not in self.attrs:
+                verrors.add(f'{self.name}.{key}', 'Field was not expected')
                 continue
 
-            data[key] = self._clean_attr(attr, value, verrors)
+            if attr := self.attrs.get(key):
+                data[key] = self._clean_attr(attr, value, verrors)
 
         # Do not make any field and required and not populate default values
         if not self.update:
@@ -732,11 +712,8 @@ class Dict(Attribute):
 
         value = value.copy()
         for key in value:
-            attr = self.attrs.get(key)
-            if not attr:
-                continue
-
-            value[key] = attr.dump(value[key])
+            if attr := self.attrs.get(key):
+                value[key] = attr.dump(value[key])
 
         return value
 
@@ -808,23 +785,24 @@ class Cron(Dict):
 
     @staticmethod
     def convert_schedule_to_db_format(data_dict, schedule_name='schedule', key_prefix='', begin_end=False):
-        if schedule_name in data_dict:
-            schedule = data_dict.pop(schedule_name)
-            db_fields = ['minute', 'hour', 'daymonth', 'month', 'dayweek']
-            if schedule is not None:
-                for index, field in enumerate(Cron.FIELDS):
+        if schedule_name not in data_dict:
+            return
+        schedule = data_dict.pop(schedule_name)
+        db_fields = ['minute', 'hour', 'daymonth', 'month', 'dayweek']
+        if schedule is not None:
+            for index, field in enumerate(Cron.FIELDS):
+                if field in schedule:
+                    data_dict[key_prefix + db_fields[index]] = schedule[field]
+            if begin_end:
+                for field in ['begin', 'end']:
                     if field in schedule:
-                        data_dict[key_prefix + db_fields[index]] = schedule[field]
-                if begin_end:
-                    for field in ['begin', 'end']:
-                        if field in schedule:
-                            data_dict[key_prefix + field] = schedule[field]
-            else:
-                for index, field in enumerate(Cron.FIELDS):
-                    data_dict[key_prefix + db_fields[index]] = None
-                if begin_end:
-                    for field in ['begin', 'end']:
-                        data_dict[key_prefix + field] = None
+                        data_dict[key_prefix + field] = schedule[field]
+        else:
+            for index, field in enumerate(Cron.FIELDS):
+                data_dict[key_prefix + db_fields[index]] = None
+            if begin_end:
+                for field in ['begin', 'end']:
+                    data_dict[key_prefix + field] = None
 
     @staticmethod
     def convert_db_format_to_schedule(data_dict, schedule_name='schedule', key_prefix='', begin_end=False):
@@ -836,9 +814,8 @@ class Cron(Dict):
                 value = data_dict.pop(key)
                 if value is None:
                     data_dict[schedule_name] = None
-                else:
-                    if data_dict[schedule_name] is not None:
-                        data_dict[schedule_name][Cron.FIELDS[index]] = value
+                elif data_dict[schedule_name] is not None:
+                    data_dict[schedule_name][Cron.FIELDS[index]] = value
         if begin_end:
             for field in ['begin', 'end']:
                 key = key_prefix + field
@@ -846,9 +823,8 @@ class Cron(Dict):
                     value = data_dict.pop(key)
                     if value is None:
                         data_dict[schedule_name] = None
-                    else:
-                        if data_dict[schedule_name] is not None:
-                            data_dict[schedule_name][field] = str(value)[:5]
+                    elif data_dict[schedule_name] is not None:
+                        data_dict[schedule_name][field] = str(value)[:5]
 
     def validate(self, value):
         if value is None:
@@ -872,15 +848,16 @@ class Cron(Dict):
         if verrors:
             raise verrors
 
-        cron_expression = ''
-        for field in Cron.FIELDS:
-            cron_expression += value.get(field) + ' ' if value.get(field) else '* '
+        cron_expression = ''.join(
+            f'{value.get(field)} ' if value.get(field) else '* '
+            for field in Cron.FIELDS
+        )
 
         try:
             iter = croniter(cron_expression)
         except Exception as e:
             iter = None
-            verrors.add(self.name, 'Please ensure fields match cron syntax - ' + str(e))
+            verrors.add(self.name, f'Please ensure fields match cron syntax - {str(e)}')
 
         if value.get('begin') and value.get('end') and not (value.get('begin') <= value.get('end')):
             verrors.add(self.name, 'Begin time should be less or equal than end time')
@@ -976,15 +953,15 @@ class OROperator:
         self.schemas = list(schemas)
         self.description = kwargs.get('description')
         self.resolved = False
-        self.default = kwargs.get('default', None)
+        self.default = kwargs.get('default')
         self.has_default = 'default' in kwargs and kwargs['default'] is not NOT_PROVIDED
 
     @property
     def required(self):
-        for schema in filter(lambda s: hasattr(s, 'required'), self.schemas):
-            if schema.required:
-                return True
-        return False
+        return any(
+            schema.required
+            for schema in filter(lambda s: hasattr(s, 'required'), self.schemas)
+        )
 
     def clean(self, value):
         if self.has_default and value == self.default:
@@ -993,7 +970,7 @@ class OROperator:
         found = False
         final_value = value
         verrors = ValidationErrors()
-        for index, i in enumerate(self.schemas):
+        for i in self.schemas:
             try:
                 tmpval = copy.deepcopy(value)
                 final_value = i.clean(tmpval)
@@ -1067,19 +1044,20 @@ class ResolverError(Exception):
 
 
 def resolver(schemas, obj):
-    if not isinstance(obj, dict) or not all(k in obj for k in ('keys', 'get_attr', 'has_key')):
+    if not isinstance(obj, dict) or any(
+        k not in obj for k in ('keys', 'get_attr', 'has_key')
+    ):
         return
 
     for schema_type in filter(obj['has_key'], obj['keys']):
         new_params = []
         schema_obj = obj['get_attr'](schema_type)
         for p in schema_obj:
-            if isinstance(p, (Patch, Ref, Attribute, OROperator)):
-                resolved = p if p.resolved else p.resolve(schemas)
-                new_params.append(resolved)
-            else:
+            if not isinstance(p, (Patch, Ref, Attribute, OROperator)):
                 raise ResolverError(f'Invalid parameter definition {p}')
 
+            resolved = p if p.resolved else p.resolve(schemas)
+            new_params.append(resolved)
         # FIXME: for some reason assigning params (f.accepts = new_params) does not work
         schema_obj.clear()
         schema_obj.extend(new_params)

@@ -66,57 +66,60 @@ class LicenseStatusAlertSource(ThreadedAlertSource):
         except Exception:
             pass
 
-        if standby_license and standby_serial is not None:
-            # check if the remote node's system serial matches the serial in the license
-            if standby_serial not in (standby_license['system_serial'], standby_license['system_serial_ha']):
-                alerts.append(Alert(LicenseAlertClass, 'System serial of standby node does not match license.',))
+        if (
+            standby_license
+            and standby_serial is not None
+            and standby_serial
+            not in (
+                standby_license['system_serial'],
+                standby_license['system_serial_ha'],
+            )
+        ):
+            alerts.append(Alert(LicenseAlertClass, 'System serial of standby node does not match license.',))
 
         chassis_hardware = self.middleware.call_sync('truenas.get_chassis_hardware')
         hardware = chassis_hardware.replace('TRUENAS-', '').split('-')
 
         if hardware[0] == 'UNKNOWN':
             alerts.append(Alert(LicenseAlertClass, 'You are not running TrueNAS on supported hardware.'))
-        else:
-            if hardware[0] == 'M':
-                if not local_license['model'].startswith('M'):
-                    alerts.append(Alert(
-                        LicenseAlertClass,
-                        (
-                            'Your license was issued for model "%s" but it was '
-                            ' detected as M series.'
-                        ) % local_license['model']
-                    ))
-            elif hardware[0] == 'X':
-                if not local_license['model'].startswith('X'):
-                    alerts.append(Alert(
-                        LicenseAlertClass,
-                        (
-                            'Your license was issued for model "%s" but it was '
-                            ' detected as X series.'
-                        ) % local_license['model']
-                    ))
-            elif hardware[0] == 'Z':
-                if not local_license['model'].startswith('Z'):
-                    alerts.append(Alert(
-                        LicenseAlertClass,
-                        (
-                            'Your license was issued for model "%s" but it was '
-                            ' detected as Z series.'
-                        ) % local_license['model']
-                    ))
-            else:
-                if hardware[0] in HW_MODELS:
-                    if hardware[0] != local_license['model']:
-                        alerts.append(Alert(
-                            LicenseAlertClass,
-                            (
-                                'Your license was issued for model "%(license)s" '
-                                'but it was detected as "%(model)s".'
-                            ) % {
-                                'model': hardware[0],
-                                'license': local_license['model'],
-                            }
-                        ))
+        elif hardware[0] == 'M':
+            if not local_license['model'].startswith('M'):
+                alerts.append(Alert(
+                    LicenseAlertClass,
+                    (
+                        'Your license was issued for model "%s" but it was '
+                        ' detected as M series.'
+                    ) % local_license['model']
+                ))
+        elif hardware[0] == 'X':
+            if not local_license['model'].startswith('X'):
+                alerts.append(Alert(
+                    LicenseAlertClass,
+                    (
+                        'Your license was issued for model "%s" but it was '
+                        ' detected as X series.'
+                    ) % local_license['model']
+                ))
+        elif hardware[0] == 'Z':
+            if not local_license['model'].startswith('Z'):
+                alerts.append(Alert(
+                    LicenseAlertClass,
+                    (
+                        'Your license was issued for model "%s" but it was '
+                        ' detected as Z series.'
+                    ) % local_license['model']
+                ))
+        elif hardware[0] in HW_MODELS and hardware[0] != local_license['model']:
+            alerts.append(Alert(
+                LicenseAlertClass,
+                (
+                    'Your license was issued for model "%(license)s" '
+                    'but it was detected as "%(model)s".'
+                ) % {
+                    'model': hardware[0],
+                    'license': local_license['model'],
+                }
+            ))
 
         enc_nums = defaultdict(lambda: 0)
         seen_ids = []

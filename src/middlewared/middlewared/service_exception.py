@@ -73,10 +73,7 @@ class ValidationErrors(CallException):
         return bool(self.errors)
 
     def __str__(self):
-        output = ''
-        for e in self.errors:
-            output += str(e) + '\n'
-        return output
+        return ''.join(str(e) + '\n' for e in self.errors)
 
     def __contains__(self, item):
         # check if an error exists for a given attribute ( item )
@@ -87,11 +84,7 @@ def adapt_exception(e):
     from .utils.shell import join_commandline
 
     if isinstance(e, subprocess.CalledProcessError):
-        if isinstance(e.cmd, (list, tuple)):
-            cmd = join_commandline(e.cmd)
-        else:
-            cmd = e.cmd
-
+        cmd = join_commandline(e.cmd) if isinstance(e.cmd, (list, tuple)) else e.cmd
         stdout = e.stdout or ""
         if isinstance(stdout, bytes):
             stdout = stdout.decode("utf-8", "ignore")

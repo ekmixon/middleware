@@ -59,10 +59,9 @@ class SensorsAlertSource(AlertSource):
 
         alerts = []
         for sensor in await self.middleware.call("sensor.query"):
-            if is_ix_hardware:
-                if sensor["name"] == "BAT":
-                    if alert := self._produce_sensor_alert(sensor):
-                        alerts.append(alert)
+            if is_ix_hardware and sensor["name"] == "BAT":
+                if alert := self._produce_sensor_alert(sensor):
+                    alerts.append(alert)
 
             if is_gigabyte:
                 if sensor["value"] is None:
@@ -75,9 +74,8 @@ class SensorsAlertSource(AlertSource):
                     alerts.append(alert)
 
             if is_m_series or is_r_series or is_freenas_certified:
-                ps_match = re.match("(PS[0-9]+) Status", sensor["name"])
-                if ps_match:
-                    ps = ps_match.group(1)
+                if ps_match := re.match("(PS[0-9]+) Status", sensor["name"]):
+                    ps = ps_match[1]
 
                     if sensor["notes"]:
                         alerts.append(Alert(
@@ -93,16 +91,10 @@ class SensorsAlertSource(AlertSource):
     def _produce_sensor_alert(self, sensor):
         if sensor["lowarn"] and sensor["value"] < sensor["lowarn"]:
             relative = "below"
-            if sensor["value"] < sensor["locrit"]:
-                level = "critical"
-            else:
-                level = "recommended"
+            level = "critical" if sensor["value"] < sensor["locrit"] else "recommended"
         elif sensor["hiwarn"] and sensor["value"] > sensor["hiwarn"]:
             relative = "above"
-            if sensor["value"] > sensor["hicrit"]:
-                level = "critical"
-            else:
-                level = "recommended"
+            level = "critical" if sensor["value"] > sensor["hicrit"] else "recommended"
         else:
             return
 

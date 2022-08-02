@@ -33,10 +33,13 @@ class SNMPTrapAlertService(ThreadedAlertService):
         self.initialized = False
 
     def send_sync(self, alerts, gone_alerts, new_alerts):
-        if self.attributes["host"] in ("localhost", "127.0.0.1", "::1"):
-            if not self.middleware.call_sync("service.started", "snmp"):
-                self.logger.trace("Local SNMP service not started, not sending traps")
-                return
+        if self.attributes["host"] in (
+            "localhost",
+            "127.0.0.1",
+            "::1",
+        ) and not self.middleware.call_sync("service.started", "snmp"):
+            self.logger.trace("Local SNMP service not started, not sending traps")
+            return
 
         if not self.initialized:
             self.snmp_engine = pysnmp.hlapi.SnmpEngine()
@@ -78,15 +81,15 @@ class SNMPTrapAlertService(ThreadedAlertService):
             self.snmp_alert_level_type = mib_builder.importSymbols("FREENAS-MIB", "AlertLevelType")[0]
             mib_view_controller = pysnmp.smi.view.MibViewController(mib_builder)
             self.snmp_alert = pysnmp.hlapi.ObjectIdentity("FREENAS-MIB", "alert"). \
-                resolveWithMib(mib_view_controller)
+                    resolveWithMib(mib_view_controller)
             self.snmp_alert_id = pysnmp.hlapi.ObjectIdentity("FREENAS-MIB", "alertId"). \
-                resolveWithMib(mib_view_controller)
+                    resolveWithMib(mib_view_controller)
             self.snmp_alert_level = pysnmp.hlapi.ObjectIdentity("FREENAS-MIB", "alertLevel"). \
-                resolveWithMib(mib_view_controller)
+                    resolveWithMib(mib_view_controller)
             self.snmp_alert_message = pysnmp.hlapi.ObjectIdentity("FREENAS-MIB", "alertMessage"). \
-                resolveWithMib(mib_view_controller)
+                    resolveWithMib(mib_view_controller)
             self.snmp_alert_cancellation = pysnmp.hlapi.ObjectIdentity("FREENAS-MIB", "alertCancellation"). \
-                resolveWithMib(mib_view_controller)
+                    resolveWithMib(mib_view_controller)
 
             self.initialized = True
 
@@ -108,7 +111,7 @@ class SNMPTrapAlertService(ThreadedAlertService):
             )
 
             if error_indication:
-                self.logger.error(f"Failed to send SNMP trap: %s", error_indication)
+                self.logger.error("Failed to send SNMP trap: %s", error_indication)
 
         for alert in new_alerts:
             error_indication, error_status, error_index, var_binds = next(
@@ -132,4 +135,4 @@ class SNMPTrapAlertService(ThreadedAlertService):
             )
 
             if error_indication:
-                self.logger.warning(f"Failed to send SNMP trap: %s", error_indication)
+                self.logger.warning("Failed to send SNMP trap: %s", error_indication)

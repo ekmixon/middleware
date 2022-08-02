@@ -50,11 +50,9 @@ class IPMISELAlertClass(AlertClass, DismissableAlertClass):
 
     @classmethod
     def format(cls, args):
-        text = "%(sensor)s %(direction)s %(event)s"
-        if args["verbose"] is not None:
-            text += ": %(verbose)s."
-        else:
-            text += "."
+        text = "%(sensor)s %(direction)s %(event)s" + (
+            ": %(verbose)s." if args["verbose"] is not None else "."
+        )
 
         return text % args
 
@@ -120,21 +118,28 @@ class IPMISELAlertSource(AlertSource):
 
         records = parse_ipmitool_output(output)
 
-        records = [
-            record for record in records
+        if records := [
+            record
+            for record in records
             if (
                 (
-                    any(record.sensor.startswith(f"{sensor} #0x")
-                        for sensor in self.IPMI_SENSORS) or
-                    any(record.sensor.startswith(f"{sensor} #0x") and record.event == event
-                        for sensor, event in self.IPMI_EVENTS_WHITELIST)
-                ) and
-                not any(record.sensor.startswith(f"{sensor} #0x") and record.event == event
-                        for sensor, event in self.IPMI_EVENTS_BLACKLIST)
+                    any(
+                        record.sensor.startswith(f"{sensor} #0x")
+                        for sensor in self.IPMI_SENSORS
+                    )
+                    or any(
+                        record.sensor.startswith(f"{sensor} #0x")
+                        and record.event == event
+                        for sensor, event in self.IPMI_EVENTS_WHITELIST
+                    )
+                )
+                and not any(
+                    record.sensor.startswith(f"{sensor} #0x")
+                    and record.event == event
+                    for sensor, event in self.IPMI_EVENTS_BLACKLIST
+                )
             )
-        ]
-
-        if records:
+        ]:
             if await self.middleware.call("keyvalue.has_key", self.dismissed_datetime_kv_key):
                 dismissed_datetime = (
                     (await self.middleware.call("keyvalue.get", self.dismissed_datetime_kv_key)).replace(tzinfo=None)

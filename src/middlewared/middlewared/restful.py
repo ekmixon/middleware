@@ -98,14 +98,14 @@ class RESTfulAPI(object):
               - PUT -> $name.update
             """
             if service['type'] == 'crud':
-                kwargs['get'] = '{}.query'.format(name)
+                kwargs['get'] = f'{name}.query'
                 post = f'{name}.create'
                 if post in self._methods:
-                    kwargs['post'] = '{}.create'.format(name)
+                    kwargs['post'] = f'{name}.create'
                 blacklist_methods.extend(list(kwargs.values()))
             elif service['type'] == 'config':
-                kwargs['get'] = '{}.config'.format(name)
-                put = '{}.update'.format(name)
+                kwargs['get'] = f'{name}.config'
+                put = f'{name}.update'
                 if put in self._methods:
                     kwargs['put'] = put
                 blacklist_methods.extend(list(kwargs.values()))
@@ -139,11 +139,7 @@ class RESTfulAPI(object):
                 if method['require_websocket']:
                     continue
                 short_methodname = methodname.rsplit('.', 1)[-1]
-                if method.get('item_method') is True:
-                    parent = subresource
-                else:
-                    parent = service_resource
-
+                parent = subresource if method.get('item_method') is True else service_resource
                 res_kwargs = {}
                 """
                 Methods with not empty accepts list and not filterable
@@ -170,7 +166,7 @@ class OpenAPIResource(object):
         self.rest.app.router.add_route('GET', '/api/v2.0/', self.get)
         self.rest.app.router.add_route('GET', '/api/v2.0/openapi.json', self.get)
         self._paths = defaultdict(dict)
-        self._schemas = dict()
+        self._schemas = {}
         self._components = defaultdict(dict)
         self._components['schemas'] = self._schemas
         self._components['responses'] = {
@@ -201,15 +197,14 @@ class OpenAPIResource(object):
             },
             'parameters': [],
         }
-        method = self.rest._methods.get(methodname)
-        if method and method.get('require_pipes'):
-            return
-        elif method:
+        if method := self.rest._methods.get(methodname):
+            if method.get('require_pipes'):
+                return
             desc = method.get('description') or ''
             if method.get('downloadable') or method.get('uploadable'):
                 job_desc = f'\n\nA file can be {"downloaded from" if method.get("downloadable") else "uploaded to"} ' \
-                           'this end point. This end point is special, please refer to Jobs section in ' \
-                           'Websocket API documentation for details.'
+                               'this end point. This end point is special, please refer to Jobs section in ' \
+                               'Websocket API documentation for details.'
                 desc = (desc or '') + job_desc
 
             if desc:
@@ -245,11 +240,17 @@ class OpenAPIResource(object):
                 ] if '{id}' not in path else []
                 desc = f'{desc}\n\n' if desc else ''
                 opobject['description'] = desc + '`query-options.extra` can be specified as query parameters with ' \
-                                                 'prefixing them with `extra.` prefix. For example, ' \
-                                                 '`extra.retrieve_properties=false` will pass `retrieve_properties` ' \
-                                                 'as an extra argument to pool/dataset endpoint.'
-            elif accepts and not (operation == 'delete' and method['item_method'] and len(accepts) == 1) and (
-                '{id}' not in path and not method['filterable']
+                                                     'prefixing them with `extra.` prefix. For example, ' \
+                                                     '`extra.retrieve_properties=false` will pass `retrieve_properties` ' \
+                                                     'as an extra argument to pool/dataset endpoint.'
+            elif (
+                accepts
+                and (
+                    operation != 'delete'
+                    or not method['item_method']
+                    or len(accepts) != 1
+                )
+                and '{id}' not in path
             ):
                 opobject['requestBody'] = self._accepts_to_request(methodname, method, accepts)
 
@@ -281,7 +282,7 @@ class OpenAPIResource(object):
                 schema['properties'][key] = self._convert_schema(val)
         elif _type == 'array':
             items = schema.get('items')
-            for i, item in enumerate(list(items)):
+            for item in list(items):
                 if item.get('type') == 'null':
                     items.remove(item)
             if isinstance(items, list):
@@ -342,8 +343,7 @@ class OpenAPIResource(object):
     def get(self, req, **kwargs):
 
         servers = []
-        host = req.headers.get('Host')
-        if host:
+        if host := req.headers.get('Host'):
             servers.append({
                 'url': f'{req.scheme}://{host}/api/v2.0',
             })
@@ -432,29 +432,29 @@ class Resource(object):
             }
 
     def __getattr__(self, attr):
-        if attr in ('on_get', 'on_post', 'on_delete', 'on_put'):
-            do = object.__getattribute__(self, 'do')
-            method = attr.split('_')[-1]
+        if attr not in ('on_get', 'on_post', 'on_delete', 'on_put'):
+            return object.__getattribute__(self, attr)
+        do = object.__getattribute__(self, 'do')
+        method = attr.split('_')[-1]
 
-            if object.__getattribute__(self, method) is None:
-                return None
+        if object.__getattribute__(self, method) is None:
+            return None
 
-            async def on_method(req, *args, **kwargs):
-                resp = web.Response()
-                info = req.match_info.route.resource.get_info()
-                if "path" in info:
-                    resource = info["path"][len("/api/v2.0"):]
-                elif "formatter" in info:
-                    resource = info["formatter"][len("/api/v2.0"):]
-                else:
-                    resource = None
-                if not self.rest._methods[getattr(self, method)]['no_auth_required']:
-                    await authenticate(self.middleware, req, method.upper(), resource)
-                kwargs.update(dict(req.match_info))
-                return await do(method, req, resp, *args, **kwargs)
+        async def on_method(req, *args, **kwargs):
+            resp = web.Response()
+            info = req.match_info.route.resource.get_info()
+            if "path" in info:
+                resource = info["path"][len("/api/v2.0"):]
+            elif "formatter" in info:
+                resource = info["formatter"][len("/api/v2.0"):]
+            else:
+                resource = None
+            if not self.rest._methods[getattr(self, method)]['no_auth_required']:
+                await authenticate(self.middleware, req, method.upper(), resource)
+            kwargs.update(dict(req.match_info))
+            return await do(method, req, resp, *args, **kwargs)
 
-            return on_method
-        return object.__getattribute__(self, attr)
+        return on_method
 
     def get_path(self):
         path = []
@@ -471,11 +471,7 @@ class Resource(object):
         extra_args = {}
         options = {}
         for key, val in list(req.query.items()):
-            if '__' in key:
-                field, op = key.split('__', 1)
-            else:
-                field, op = key, '='
-
+            field, op = key.split('__', 1) if '__' in key else (key, '=')
             def convert(val):
                 if val.isdigit():
                     val = int(val)

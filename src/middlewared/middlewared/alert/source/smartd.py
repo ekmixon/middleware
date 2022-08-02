@@ -15,9 +15,11 @@ class SmartdAlertSource(ThreadedAlertSource):
             if self.middleware.call_sync("system.vm"):
                 return
 
-            if self.middleware.call_sync("system.is_enterprise"):
-                if self.middleware.call_sync("failover.status") != "MASTER":
-                    return
+            if (
+                self.middleware.call_sync("system.is_enterprise")
+                and self.middleware.call_sync("failover.status") != "MASTER"
+            ):
+                return
 
             if not self.middleware.call_sync("service.started", "smartd"):
                 return Alert(SmartdAlertClass)

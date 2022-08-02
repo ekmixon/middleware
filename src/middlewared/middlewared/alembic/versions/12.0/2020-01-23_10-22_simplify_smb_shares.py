@@ -46,26 +46,26 @@ def upgrade():
 
     conn = op.get_bind()
     smb_shares = [dict(row) for row in conn.execute("SELECT * FROM sharing_cifs_share").fetchall()]
+    aux_updated = False
+
     for share in smb_shares:
         aux_params = share.get('cifs_auxsmbconf', '').split('\n')
         vfs_objects = share.get('cifs_vfsobjects', '')
         has_nondefault_vfs_objects = False
-        aux_updated = False
-
         for v in vfs_objects.split(','):
             if v not in standard_vfs_objects:
                 set_durable = False
                 has_nondefault_vfs_objects = True
 
-            if v == 'fruit':
-                fruit_enabled = True
-            if v == 'streams_xattr':
-                has_streams = True
-            if v == 'noacl':
-                has_acl = False
             if v == 'catia':
                 has_catia = True
 
+            elif v == 'fruit':
+                fruit_enabled = True
+            elif v == 'noacl':
+                has_acl = False
+            elif v == 'streams_xattr':
+                has_streams = True
         if share['cifs_timemachine']:
             fruit_enabled = True
 

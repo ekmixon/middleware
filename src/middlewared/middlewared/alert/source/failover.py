@@ -136,11 +136,13 @@ class FailoverAlertSource(ThreadedAlertSource):
             remote = self.middleware.call_sync('failover.call_remote', 'failover.vip.get_states')
 
             errors = self.middleware.call_sync('failover.vip.check_states', local, remote)
-            for error in errors:
-                alerts.append(Alert(
+            alerts.extend(
+                Alert(
                     CARPStatesDoNotAgreeAlertClass,
                     {"error": error},
-                ))
+                )
+                for error in errors
+            )
 
         except CallError as e:
             if e.errno != errno.ECONNREFUSED:
@@ -161,8 +163,9 @@ class FailoverAlertSource(ThreadedAlertSource):
         elif status not in ('MASTER', 'BACKUP', 'SINGLE'):
             alerts.append(Alert(ExternalFailoverLinkStatusAlertClass))
 
-        internal_ifaces = self.middleware.call_sync('failover.internal_interfaces')
-        if internal_ifaces:
+        if internal_ifaces := self.middleware.call_sync(
+            'failover.internal_interfaces'
+        ):
             p1 = subprocess.Popen(
                 "/sbin/ifconfig %s|grep -E 'vhid (10|20) '|grep 'carp:'" % internal_ifaces[0],
                 stdout=subprocess.PIPE,

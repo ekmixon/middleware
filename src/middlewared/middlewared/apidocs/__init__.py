@@ -19,9 +19,13 @@ def json_filter(value):
 
 @app.template_filter()
 def markdown_filter(value):
-    if not value:
-        return value
-    return markdown.markdown(value, extensions=[CodeHiliteExtension(noclasses=True)])
+    return (
+        markdown.markdown(
+            value, extensions=[CodeHiliteExtension(noclasses=True)]
+        )
+        if value
+        else value
+    )
 
 
 app.jinja_env.filters['json'] = json_filter
@@ -43,11 +47,11 @@ def websocket():
     services = []
     # FIXME: better way to call middleware using asyncio insteaad of using client
     with Client() as c:
-        for name in sorted(c.call('core.get_services')):
-            services.append({
-                'name': name,
-                'methods': c.call('core.get_methods', name)
-            })
+        services.extend(
+            {'name': name, 'methods': c.call('core.get_methods', name)}
+            for name in sorted(c.call('core.get_services'))
+        )
+
         events = render_template('websocket/events.md', **{'events': c.call('core.get_events')})
 
     query_filters = render_template('websocket/query.md')

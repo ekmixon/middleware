@@ -23,14 +23,18 @@ def upgrade():
         if sql is not None and '__old"' in sql:
             sql = sql.replace('__old"', '"')
 
-            index_sqls = []
-            for index_sql, in conn.execute("""
+            index_sqls = [
+                index_sql
+                for (index_sql,) in conn.execute(
+                    """
                 SELECT sql
                 FROM sqlite_master
                 WHERE type = 'index' AND tbl_name = ?
-            """, (name,)).fetchall():
-                if index_sql is not None:
-                    index_sqls.append(index_sql)
+            """,
+                    (name,),
+                ).fetchall()
+                if index_sql is not None
+            ]
 
             params = {"table": f'"{name}"', "table_old": f'"{name}__old"'}
             conn.execute("ALTER TABLE %(table)s RENAME TO %(table_old)s" % params)

@@ -30,5 +30,8 @@ def migrate(middleware):
                     "attributes": credential["attributes"],
                 })
             except Exception as e:
-                middleware.logger.warning(f"Error migrating SFTP cloud credential %d to keychain: %r",
-                                          credential['id'], e)
+                middleware.logger.warning(
+                    "Error migrating SFTP cloud credential %d to keychain: %r",
+                    credential['id'],
+                    e,
+                )
